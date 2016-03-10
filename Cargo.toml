@@ -1,0 +1,18 @@
+[package]
+name = "wamp"
+version = "0.1.0"
+authors = ["Daniel Yule <yule@cs.dal.ca>"]
+build = "build.rs"
+
+[features]
+default = ["serde_codegen"]
+nightly = ["serde_macros"]
+
+[build-dependencies]
+serde_codegen = { version = "*", optional = true }
+syntex = "*"
+
+[dependencies]
+serde = "*"
+serde_json = "*"
+serde_macros = { version = "*", optional = true }
