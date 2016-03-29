@@ -1,7 +1,6 @@
 use serde;
-use serde::ser::Serializer;
 use serde::de::Deserialize;
-use messages::types::*;
+pub use messages::types::*;
 mod types;
 
 macro_rules! try_or {
@@ -14,7 +13,7 @@ macro_rules! try_or {
 }
 
 #[derive(Debug, PartialEq)]
-enum Message {
+pub enum Message {
     Hello(URI, HelloDetails),
     Welcome(ID, WelcomeDetails),
     Abort(ErrorDetails, Reason),
@@ -391,17 +390,16 @@ mod test {
             "[16,23934583,{\"acknolwedge\":true},\"ca.dal.test.topic2\",[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
-        kwargs.insert("key1".to_string(), Value::Integer(5));
-        kwargs.insert("key2".to_string(), Value::List(vec![Value::String("a value".to_string())]));
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
         two_way_test!(
             Message::PublishKwArgs(3243542, PublishOptions::new(true), URI::new("ca.dal.test.topic3"), Vec::new(), kwargs),
-            "[16,3243542,{\"acknolwedge\":true},\"ca.dal.test.topic3\",[],{\"key1\":5,\"key2\":[\"a value\"]}]"
+            "[16,3243542,{\"acknolwedge\":true},\"ca.dal.test.topic3\",[],{\"key1\":[5]}]"
         )
     }
 
     #[test]
     fn serialize_published() {
-        two_way_test!(
+          two_way_test!(
             Message::Published(23443, 564564),
             "[17,23443,564564]"
         )
@@ -419,11 +417,10 @@ mod test {
             "[36,764346,3895494,{},[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
-        kwargs.insert("key1".to_string(), Value::Integer(5));
-        kwargs.insert("key2".to_string(), Value::List(vec![Value::String("a value".to_string())]));
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
         two_way_test!(
             Message::EventKwArgs(65675, 587495, EventDetails::new(), Vec::new(), kwargs),
-            "[36,65675,587495,{},[],{\"key1\":5,\"key2\":[\"a value\"]}]"
+            "[36,65675,587495,{},[],{\"key1\":[5]}]"
         )
     }
 

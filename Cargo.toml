@@ -4,6 +4,14 @@ version = "0.1.0"
 authors = ["Daniel Yule <yule@cs.dal.ca>"]
 build = "build.rs"
 
+[lib]
+name = "wamp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "wamp_client"
+path = "src/main.rs"
+
 [features]
 default = ["serde_codegen"]
 nightly = ["serde_macros"]
@@ -17,3 +25,7 @@ serde = "*"
 serde_json = "*"
 serde_macros = { version = "*", optional = true }
 websocket = "0.15.1"
+url = "*"
+log = "0.3"
+rmp = "0.7"
+rmp-serde = {version="0.9"}

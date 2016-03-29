@@ -23,7 +23,8 @@ pub type List = Vec<Value>;
          Structs
 **************************/
 
-#[derive(Debug, PartialEq)]
+// TODO properly implement Hash and Eq
+#[derive(Debug, PartialEq, Clone)]
 pub struct URI {
     pub uri: String
 }
@@ -43,7 +44,8 @@ pub enum Value {
     Dict(Dict),
     Integer(u64),
     String(String),
-    List(List)
+    List(List),
+    Boolean(bool)
 }
 
 #[derive(Hash, Eq, PartialEq, Debug)]
@@ -103,14 +105,14 @@ pub enum ErrorType {
 pub struct HelloDetails {
     #[serde(default, skip_serializing_if="Option::is_none")]
     agent: Option<String>,
-    roles:  HashMap<ClientRole, HashMap<String, Features>>
+    roles:  HashMap<ClientRole, HashMap<String, Value>>
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct WelcomeDetails {
     #[serde(default, skip_serializing_if="Option::is_none")]
     agent: Option<String>,
-    roles:  HashMap<RouterRole, HashMap<String, Features>>
+    roles:  HashMap<RouterRole, HashMap<String, Value>>
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -156,14 +158,14 @@ struct ValueVisitor;
       Implementations
 **************************/
 impl HelloDetails {
-    pub fn new(roles: HashMap<ClientRole, HashMap<String, Features>>) -> HelloDetails {
+    pub fn new(roles: HashMap<ClientRole, HashMap<String, Value>>) -> HelloDetails {
         HelloDetails {
             roles: roles,
             agent: None
         }
     }
 
-    pub fn new_with_agent(roles: HashMap<ClientRole, HashMap<String, Features>>, agent: &str) -> HelloDetails {
+    pub fn new_with_agent(roles: HashMap<ClientRole, HashMap<String, Value>>, agent: &str) -> HelloDetails {
         HelloDetails {
             roles: roles,
             agent: Some(agent.to_string())
@@ -173,14 +175,14 @@ impl HelloDetails {
 }
 
 impl WelcomeDetails {
-    pub fn new(roles: HashMap<RouterRole, HashMap<String, Features>>) -> WelcomeDetails {
+    pub fn new(roles: HashMap<RouterRole, HashMap<String, Value>>) -> WelcomeDetails {
         WelcomeDetails {
             roles: roles,
             agent: None
         }
     }
 
-    pub fn new_with_agent(roles: HashMap<RouterRole, HashMap<String, Features>>, agent: &str) -> WelcomeDetails {
+    pub fn new_with_agent(roles: HashMap<RouterRole, HashMap<String, Value>>, agent: &str) -> WelcomeDetails {
         WelcomeDetails {
             roles: roles,
             agent: Some(agent.to_string())
@@ -244,8 +246,9 @@ impl serde::Serialize for Value {
         match *self {
             Value::Dict(ref dict) => dict.serialize(serializer),
             Value::String(ref s) => serializer.serialize_str(s),
-            Value::Integer(ref i) => serializer.serialize_u64(*i),
-            Value::List(ref list) => list.serialize(serializer)
+            Value::Integer(i) => serializer.serialize_u64(i),
+            Value::List(ref list) => list.serialize(serializer),
+            Value::Boolean(b) => serializer.serialize_bool(b)
         }
     }
 }
@@ -275,6 +278,12 @@ impl serde::de::Visitor for ValueVisitor {
     fn visit_u64<E>(&mut self, value: u64) -> Result<Value, E>
     where E: serde::de::Error {
         Ok(Value::Integer(value))
+    }
+
+    #[inline]
+    fn visit_bool<E>(&mut self, value: bool) -> Result<Value, E>
+    where E: serde::de::Error {
+        Ok(Value::Boolean(value))
     }
 
 
