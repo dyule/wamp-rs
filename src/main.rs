@@ -4,9 +4,10 @@
 
 extern crate serde;
 extern crate serde_json;
+extern crate websocket;
 
-#[cfg(feature = "serde_macros")]
-include!("main.rs.in");
+mod messages;
 
-#[cfg(not(feature = "serde_macros"))]
-include!(concat!(env!("OUT_DIR"), "/main.rs"));
+fn main() {
+
+}

@@ -16,3 +16,4 @@ syntex = "*"
 serde = "*"
 serde_json = "*"
 serde_macros = { version = "*", optional = true }
+websocket = "0.15.1"

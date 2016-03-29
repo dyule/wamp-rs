@@ -5,16 +5,18 @@ mod inner {
 
     use std::env;
     use std::path::Path;
+    use std::fs;
 
     pub fn main() {
         let out_dir = env::var_os("OUT_DIR").unwrap();
 
-        let src = Path::new("src/main.rs.in");
-        let dst = Path::new(&out_dir).join("main.rs");
-
+        let src = Path::new("src/messages/mod.rs.in");
+        let message_path = Path::new(&out_dir).join("messages");
+        let dst = Path::new(&out_dir).join("messages").join("mod.rs");
         let mut registry = syntex::Registry::new();
 
         serde_codegen::register(&mut registry);
+        let _ = fs::create_dir(message_path);
         registry.expand("", &src, &dst).unwrap();
     }
 }
