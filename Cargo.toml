@@ -8,10 +8,6 @@ build = "build.rs"
 name = "wamp"
 path = "src/lib.rs"
 
-[[bin]]
-name = "wamp_client"
-path = "src/main.rs"
-
 [features]
 default = ["serde_codegen"]
 nightly = ["serde_macros"]
@@ -27,5 +23,5 @@ serde_macros = { version = "*", optional = true }
 websocket = "0.15.1"
 url = "*"
 log = "0.3"
-rmp = "0.7"
-rmp-serde = {version="0.9"}
+rmp = {version = "0.7"}
+rmp-serde = {version = "0.9"}

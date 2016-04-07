@@ -4,7 +4,7 @@ use websocket::client;
 use websocket::stream;
 use websocket::message::{Message as WSMessage, Type};
 use websocket::header;
-use messages::{URI, Dict, List, ID, SubscribeOptions, PublishOptions, Message, ClientRole, HelloDetails, Reason, ErrorDetails};
+use messages::{URI, Dict, List, ID, SubscribeOptions, PublishOptions, Message,  HelloDetails, Reason, ErrorDetails, ClientRoles};
 use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use serde_json;
@@ -147,7 +147,7 @@ fn handle_welcome_message(receiver: &mut client::Receiver<stream::WebSocketStrea
                         }
                     },
                     Err(_) => {
-                        error!("Receieved non-utf-8 json message.  Ignoring");
+                        return Err(Error::new(ErrorKind::MalformedData));
                     }
                 }
             },
@@ -157,8 +157,8 @@ fn handle_welcome_message(receiver: &mut client::Receiver<stream::WebSocketStrea
                     Ok(message) => {
                         return Ok(message);
                     },
-                    Err(_) => {
-                        error!("Could not understand MsgPack message");
+                    Err(e) => {
+                        return Err(Error::new(ErrorKind::MsgPackError(e)));
                     }
                 }
             },
@@ -173,7 +173,7 @@ fn handle_welcome_message(receiver: &mut client::Receiver<stream::WebSocketStrea
     }
     Err(Error::new(ErrorKind::ConnectionLost))
 }
- 
+
 impl Connection {
     pub fn new(url: &str, realm: &str) -> Connection {
         Connection {
@@ -216,9 +216,8 @@ impl Connection {
             connection_state: Mutex::new(ConnectionState::Connected)
         });
 
-        let mut client_roles = HashMap::new();
-        client_roles.insert(ClientRole::Subscriber, HashMap::new());
-        let hello_message = Message::Hello(self.realm.clone(), HelloDetails::new(client_roles));
+
+        let hello_message = Message::Hello(self.realm.clone(), HelloDetails::new(ClientRoles::new()));
         info!("Sending Hello message");
         if info.protocol == WAMP_MSGPACK {
             try!(send_message_msgpack(&info.sender, hello_message))
@@ -229,6 +228,10 @@ impl Connection {
         let welcome_message = try!(handle_welcome_message(&mut receiver, &info.sender));
         let session_id = match welcome_message {
             Message::Welcome(session_id, _) => session_id,
+            Message::Abort(_, reason) => {
+                error!("Recieved abort message.  Reason: {:?}", reason);
+                return Err(Error::new(ErrorKind::ConnectionLost));
+            },
             _ => return Err(Error::new(ErrorKind::UnexpectedMessage("Expected Welcome Message")))
         };
 

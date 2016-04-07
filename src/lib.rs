@@ -13,13 +13,13 @@ extern crate log;
 
 mod messages;
 pub mod client;
-mod pubsub;
 
 use websocket::result::WebSocketError;
 use std::fmt;
 use url::ParseError;
 use std::sync::mpsc::SendError;
 use serde_json::Error as JSONError;
+use rmp_serde::decode::Error as MsgPackError;
 
 pub use messages::{URI, Dict, List, Value};
 
@@ -38,6 +38,7 @@ pub enum ErrorKind {
     ThreadError(SendError<messages::Message>),
     ConnectionLost,
     JSONError(JSONError),
+    MsgPackError(MsgPackError),
     MalformedData,
 }
 impl Error {
@@ -68,6 +69,7 @@ impl ErrorKind {
             &ErrorKind::ThreadError(ref e) => e.to_string(),
             &ErrorKind::ConnectionLost => "Connection Lost".to_string(),
             &ErrorKind::JSONError(ref e) => e.to_string(),
+            &ErrorKind::MsgPackError(ref e) => e.to_string(),
             &ErrorKind::MalformedData => "Malformed Data".to_string(),
         }
     }

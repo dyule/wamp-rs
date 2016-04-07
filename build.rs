@@ -10,9 +10,9 @@ mod inner {
     pub fn main() {
         let out_dir = env::var_os("OUT_DIR").unwrap();
 
-        let src = Path::new("src/messages/mod.rs.in");
+        let src = Path::new("src/messages/types.rs.in");
         let message_path = Path::new(&out_dir).join("messages");
-        let dst = Path::new(&out_dir).join("messages").join("mod.rs");
+        let dst = Path::new(&out_dir).join("messages").join("types.rs");
         let mut registry = syntex::Registry::new();
 
         serde_codegen::register(&mut registry);
