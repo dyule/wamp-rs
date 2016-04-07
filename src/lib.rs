@@ -4,6 +4,7 @@
 extern crate serde;
 extern crate serde_json;
 extern crate websocket;
+extern crate ws;
 extern crate url;
 extern crate rmp;
 extern crate rmp_serde;
@@ -13,6 +14,7 @@ extern crate log;
 
 mod messages;
 pub mod client;
+pub mod router;
 
 use websocket::result::WebSocketError;
 use std::fmt;
