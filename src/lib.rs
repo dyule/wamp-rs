@@ -8,6 +8,7 @@ extern crate ws;
 extern crate url;
 extern crate rmp;
 extern crate rmp_serde;
+extern crate rand;
 
 #[macro_use]
 extern crate log;

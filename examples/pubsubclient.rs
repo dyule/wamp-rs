@@ -14,7 +14,7 @@ struct SimpleLogger;
 
 impl log::Log for SimpleLogger {
     fn enabled(&self, metadata: &LogMetadata) -> bool {
-        metadata.level() <= LogLevel::Info
+        metadata.level() <= LogLevel::Debug
     }
 
     fn log(&self, record: &LogRecord) {
@@ -28,7 +28,7 @@ impl log::Log for SimpleLogger {
 
 fn main() {
     log::set_logger(|max_log_level| {
-        max_log_level.set(log::LogLevelFilter::Info);
+        max_log_level.set(log::LogLevelFilter::Debug);
         Box::new(SimpleLogger)
     }).unwrap();
     let connection = Connection::new("ws://127.0.0.1:8090/ws", "realm1");

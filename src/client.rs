@@ -127,7 +127,7 @@ fn send_message_msgpack(sender: &Mutex<client::Sender<stream::WebSocketStream>>,
 }
 
 fn handle_welcome_message(receiver: &mut client::Receiver<stream::WebSocketStream>, sender: &Mutex<client::Sender<stream::WebSocketStream>>) -> WampResult<Message> {
-    let mut sender = sender.lock().unwrap();
+
     for message in receiver.incoming_messages() {
         let message: WSMessage = try_websocket!(message);
         match message.opcode {
@@ -136,6 +136,7 @@ fn handle_welcome_message(receiver: &mut client::Receiver<stream::WebSocketStrea
                 return Err(Error::new(ErrorKind::ConnectionLost));
             },
             Type::Text => {
+                debug!("Recieved welcome message in text form: {:?}", message.payload);
                 match from_utf8(&message.payload) {
                     Ok(message_text) => {
                         match serde_json::from_str(message_text) {
@@ -152,6 +153,7 @@ fn handle_welcome_message(receiver: &mut client::Receiver<stream::WebSocketStrea
                 }
             },
             Type::Binary => {
+                debug!("Recieved welcome message in binary form: {:?}", message.payload);
                 let mut de = RMPDeserializer::new(Cursor::new(&*message.payload));
                 match Deserialize::deserialize(&mut de) {
                     Ok(message) => {
@@ -164,6 +166,7 @@ fn handle_welcome_message(receiver: &mut client::Receiver<stream::WebSocketStrea
             },
             Type::Ping => {
                 info!("Receieved ping.  Ponging");
+                let mut sender = sender.lock().unwrap();
                 let _ = sender.send_message(&WSMessage::pong(message.payload));
             },
             Type::Pong => {
@@ -218,13 +221,9 @@ impl Connection {
 
 
         let hello_message = Message::Hello(self.realm.clone(), HelloDetails::new(ClientRoles::new()));
-        info!("Sending Hello message");
-        if info.protocol == WAMP_MSGPACK {
-            try!(send_message_msgpack(&info.sender, hello_message))
-        } else {
-            try!(send_message_json(&info.sender, hello_message))
-        }
-
+        debug!("Sending Hello message");
+        send_message(&info.sender, hello_message, &info.protocol).unwrap();
+        debug!("Awaiting welcome message");
         let welcome_message = try!(handle_welcome_message(&mut receiver, &info.sender));
         let session_id = match welcome_message {
             Message::Welcome(session_id, _) => session_id,

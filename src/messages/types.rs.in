@@ -153,13 +153,13 @@ pub struct SubscriberRole {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct DealerRole {
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing, default)]
     feature: Option<String>
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct BrokerRole {
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing, default)]
     feature: Option<String>
 }
 
