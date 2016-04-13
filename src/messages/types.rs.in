@@ -37,7 +37,7 @@ impl URI {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     // The ID and URI types cannot be distinguished from string and integer types respectively.
     // So, we just ignore them here
@@ -256,6 +256,10 @@ impl PublishOptions {
         PublishOptions {
             acknolwedge: acknolwedge
         }
+    }
+
+    pub fn should_acknolwedge(&self) -> bool {
+        self.acknolwedge
     }
 }
 

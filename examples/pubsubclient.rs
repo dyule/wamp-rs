@@ -50,6 +50,9 @@ fn main() {
         info!("Sending");
         client.publish(URI::new("ca.dal.test.topic1"), vec![Value::Integer(5)], HashMap::new()).unwrap();
         info!("Sent");
+        loop {
+            
+        }
     }
 
 

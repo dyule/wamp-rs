@@ -10,7 +10,8 @@ use rmp::Marker;
 use rmp::encode::{ValueWriteError, write_map_len, write_str};
 use rmp_serde::encode::VariantWriter;
 use std::io::{Cursor, Write};
-use messages::{Message, URI, HelloDetails, WelcomeDetails, RouterRoles, SubscribeOptions};
+use messages::{Message, URI, HelloDetails, WelcomeDetails, RouterRoles, SubscribeOptions, PublishOptions, EventDetails};
+use ::{List, Dict};
 use std::marker::PhantomData;
 use rand::{thread_rng};
 use rand::distributions::{Range, IndependentSample};
@@ -165,6 +166,15 @@ impl ConnectionHandler{
             Message::Subscribe(request_id, options, topic) => {
                 self.handle_subscribe(request_id,  options, topic)
             },
+            Message::Publish(request_id, options, topic) => {
+                self.handle_publish(request_id, options, topic, Vec::new(), HashMap::new())
+            },
+            Message::PublishArgs(request_id, options, topic, args) => {
+                self.handle_publish(request_id, options, topic, args, HashMap::new())
+            },
+            Message::PublishKwArgs(request_id, options, topic, args, kwargs) => {
+                self.handle_publish(request_id, options, topic, args, kwargs)
+            },
             _ => {
                 Err(Error::new(ErrorKind::Internal, format!("Invalid message type: {:?}", message)))
             }
@@ -196,6 +206,35 @@ impl ConnectionHandler{
                 send_message(&info.sender, &self.protocol, Message::Subscribed(request_id, topic.id))
             },
              None => {
+                // TODO But actually handle the eror here
+                Ok(())
+            }
+        }
+    }
+
+    fn handle_publish(&mut self, request_id: u64, options: PublishOptions, topic: URI, args: List, kwargs: Dict) -> Result<()> {
+        debug!("Responding to publish message (id: {}, topic: {})", request_id, topic.uri);
+        match self.realm {
+            Some(ref realm) => {
+                let realm = realm.borrow();
+                let subscriptions = realm.subscriptions.lock().unwrap();
+                let topic = match subscriptions.get(&topic.uri) {
+                    Some(topic) => topic,
+                    None => return Err(Error::new(ErrorKind::Internal, "No topic with that name"))
+                };
+                let topic_id = topic.id;
+                let publication_id = random_id();
+                if options.should_acknolwedge() {
+                    let info = self.info.borrow();
+                    try!(send_message(&info.sender, &self.protocol, Message::Published(request_id, publication_id)));
+                }
+                for subscriber in topic.subscribers.iter() {
+                    // TODO the protocol should be stored by subscriber
+                    try!(send_message(subscriber, &self.protocol, Message::EventKwArgs(topic_id, publication_id, EventDetails::new(), args.clone(), kwargs.clone())));
+                }
+                Ok(())
+            },
+            None => {
                 // TODO But actually handle the eror here
                 Ok(())
             }
@@ -241,9 +280,6 @@ impl Handler for ConnectionHandler {
         };
         try!(self.process_protocol(request, &mut response));
         debug!("Sending response");
-        for _ in 0..3000 {
-            println!("Wasting time");
-        }
         Ok(response)
    }
 
