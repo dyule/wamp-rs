@@ -14,6 +14,7 @@ extern crate rand;
 extern crate log;
 
 mod messages;
+mod utils;
 pub mod client;
 pub mod router;
 

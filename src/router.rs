@@ -6,10 +6,8 @@ use serde_json;
 use serde::{Deserialize, Serialize};
 use rmp_serde::Deserializer as RMPDeserializer;
 use rmp_serde::Serializer;
-use rmp::Marker;
-use rmp::encode::{ValueWriteError, write_map_len, write_str};
-use rmp_serde::encode::VariantWriter;
-use std::io::{Cursor, Write};
+use utils::StructMapWriter;
+use std::io::Cursor;
 use messages::{Message, URI, HelloDetails, WelcomeDetails, RouterRoles, SubscribeOptions, PublishOptions, EventDetails};
 use ::{List, Dict};
 use std::marker::PhantomData;
@@ -35,19 +33,19 @@ struct RouterInfo {
 
 struct Topic {
     id: u64,
-    subscribers: Vec<Sender>
+    subscribers: Vec<Arc<RefCell<ConnectionInfo>>>
 }
 
 struct ConnectionHandler {
     info: Arc<RefCell<ConnectionInfo>>,
     router: Arc<RefCell<RouterInfo>>,
     realm: Option<Arc<RefCell<Realm>>>,
-    protocol: String,
 }
 
 struct ConnectionInfo {
     state: ConnectionState,
     sender: Sender,
+    protocol: String,
     id: u64
 }
 
@@ -67,12 +65,14 @@ fn random_id() -> u64 {
     between.ind_sample(&mut rng)
 }
 
-fn send_message(sender: &Sender, protocol: &str, message: Message) -> Result<()> {
-    debug!("Sending message {:?} via {}", message, protocol);
-    if protocol == WAMP_JSON {
-        send_message_json(sender, message)
+fn send_message(info: &Arc<RefCell<ConnectionInfo>>, message: Message) -> Result<()> {
+    let info = info.borrow();
+
+    debug!("Sending message {:?} via {}", message, info.protocol);
+    if info.protocol == WAMP_JSON {
+        send_message_json(&info.sender, message)
     } else {
-        send_message_msgpack(sender, message)
+        send_message_msgpack(&info.sender, message)
     }
 }
 
@@ -80,24 +80,6 @@ fn send_message_json(sender: &Sender, message: Message) -> Result<()> {
     // Send the message
     sender.send(WSMessage::Text(serde_json::to_string(&message).unwrap()))
 
-}
-
-
-
-struct StructMapWriter;
-
-impl VariantWriter for StructMapWriter {
-    fn write_struct_len<W>(&self, wr: &mut W, len: u32) -> StdResult<Marker, ValueWriteError>
-        where W: Write
-    {
-        write_map_len(wr, len)
-    }
-
-    fn write_field_name<W>(&self, wr: &mut W, _key: &str) -> StdResult<(), ValueWriteError>
-        where W: Write
-    {
-        write_str(wr, _key)
-    }
 }
 
 fn send_message_msgpack(sender: &Sender, message: Message) -> Result<()> {
@@ -127,16 +109,13 @@ impl Router {
                 info: Arc::new(RefCell::new(ConnectionInfo{
                     state: ConnectionState::Initializing,
                     sender: sender,
+                    protocol: String::new(),
                     id: random_id()
                 })),
                 realm: None,
                 router: self.info.clone(),
-                protocol: String::new()
             }
         }).unwrap()
-        // Create a Router
-        // use ARC to give everyone a reference to it
-        // Each connection has direct connection to a client, as well as to a router
     }
 
     pub fn add_realm(&mut self, realm: &str) {
@@ -167,13 +146,13 @@ impl ConnectionHandler{
                 self.handle_subscribe(request_id,  options, topic)
             },
             Message::Publish(request_id, options, topic) => {
-                self.handle_publish(request_id, options, topic, Vec::new(), HashMap::new())
+                self.handle_publish(request_id, options, topic, None, None)
             },
             Message::PublishArgs(request_id, options, topic, args) => {
-                self.handle_publish(request_id, options, topic, args, HashMap::new())
+                self.handle_publish(request_id, options, topic, Some(args), None)
             },
             Message::PublishKwArgs(request_id, options, topic, args, kwargs) => {
-                self.handle_publish(request_id, options, topic, args, kwargs)
+                self.handle_publish(request_id, options, topic, Some(args), Some(kwargs))
             },
             _ => {
                 Err(Error::new(ErrorKind::Internal, format!("Invalid message type: {:?}", message)))
@@ -187,8 +166,8 @@ impl ConnectionHandler{
             self.info.borrow_mut().state = ConnectionState::Connected;
         }
         try!(self.set_realm(realm.uri));
-        let info = self.info.borrow();
-        send_message(&info.sender, &self.protocol, Message::Welcome(info.id, WelcomeDetails::new(RouterRoles::new())))
+        let id = {self.info.borrow().id};
+        send_message(&self.info, Message::Welcome(id, WelcomeDetails::new(RouterRoles::new())))
     }
 
     fn handle_subscribe(&mut self, request_id: u64, _options: SubscribeOptions, topic: URI) -> Result<()> {
@@ -201,9 +180,8 @@ impl ConnectionHandler{
                     id: random_id(),
                     subscribers: Vec::new(),
                 });
-                let info = self.info.borrow();
-                topic.subscribers.push(info.sender.clone());
-                send_message(&info.sender, &self.protocol, Message::Subscribed(request_id, topic.id))
+                topic.subscribers.push(self.info.clone());
+                send_message(&self.info, Message::Subscribed(request_id, topic.id))
             },
              None => {
                 // TODO But actually handle the eror here
@@ -212,7 +190,7 @@ impl ConnectionHandler{
         }
     }
 
-    fn handle_publish(&mut self, request_id: u64, options: PublishOptions, topic: URI, args: List, kwargs: Dict) -> Result<()> {
+    fn handle_publish(&mut self, request_id: u64, options: PublishOptions, topic: URI, args: Option<List>, kwargs: Option<Dict>) -> Result<()> {
         debug!("Responding to publish message (id: {}, topic: {})", request_id, topic.uri);
         match self.realm {
             Some(ref realm) => {
@@ -225,12 +203,32 @@ impl ConnectionHandler{
                 let topic_id = topic.id;
                 let publication_id = random_id();
                 if options.should_acknolwedge() {
-                    let info = self.info.borrow();
-                    try!(send_message(&info.sender, &self.protocol, Message::Published(request_id, publication_id)));
+                    try!(send_message(&self.info, Message::Published(request_id, publication_id)));
                 }
                 for subscriber in topic.subscribers.iter() {
-                    // TODO the protocol should be stored by subscriber
-                    try!(send_message(subscriber, &self.protocol, Message::EventKwArgs(topic_id, publication_id, EventDetails::new(), args.clone(), kwargs.clone())));
+                    // XXX See if there is a way to avoid copying arguments here
+                    match kwargs {
+                        Some(ref kwargs) => {
+                            match args {
+                                Some(ref args) => {
+                                    try!(send_message(subscriber, Message::EventKwArgs(topic_id, publication_id, EventDetails::new(), args.clone(), kwargs.clone())));
+                                },
+                                None => {
+                                    try!(send_message(subscriber, Message::EventKwArgs(topic_id, publication_id, EventDetails::new(), Vec::new(), kwargs.clone())));
+                                }
+                            }
+                        },
+                        None => {
+                            match args {
+                                Some(ref args) => {
+                                    try!(send_message(subscriber, Message::EventArgs(topic_id, publication_id, EventDetails::new(), args.clone())));
+                                },
+                                None => {
+                                    try!(send_message(subscriber, Message::Event(topic_id, publication_id, EventDetails::new())));
+                                }
+                            }
+                        }
+                    }
                 }
                 Ok(())
             },
@@ -259,7 +257,8 @@ impl ConnectionHandler{
         for protocol in protocols {
             if protocol == WAMP_JSON || protocol == WAMP_MSGPACK {
                 response.set_protocol(protocol);
-                self.protocol = protocol.to_string();
+                let mut info = self.info.borrow_mut();
+                info.protocol = protocol.to_string();
                 return Ok(())
             }
         }

@@ -6,10 +6,8 @@ use websocket::message::{Message as WSMessage, Type};
 use websocket::header;
 use messages::{URI, Dict, List, ID, SubscribeOptions, PublishOptions, Message,  HelloDetails, Reason, ErrorDetails, ClientRoles};
 use std::collections::HashMap;
-use std::io::{Cursor, Write};
 use serde_json;
 use serde::{Deserialize, Serialize};
-
 use std::str::from_utf8;
 use std::fmt;
 use ::{WampResult, Error, ErrorKind};
@@ -17,8 +15,8 @@ use std::thread::{self, JoinHandle};
 use std::sync::{Mutex, Arc};
 use rmp_serde::Deserializer as RMPDeserializer;
 use rmp_serde::Serializer;
-use rmp::Marker;
-use rmp::encode::{ValueWriteError, write_map_len, write_str};
+use utils::StructMapWriter;
+use std::io::Cursor;
 use rmp_serde::encode::VariantWriter;
 
 macro_rules! try_websocket {
@@ -89,24 +87,6 @@ fn send_message_json(sender: &Mutex<client::Sender<stream::WebSocketStream>>, me
             let _ = sender.send_message(&WSMessage::close());
             Err(Error::new(ErrorKind::WebSocketError(e)))
         }
-    }
-}
-
-
-
-struct StructMapWriter;
-
-impl VariantWriter for StructMapWriter {
-    fn write_struct_len<W>(&self, wr: &mut W, len: u32) -> Result<Marker, ValueWriteError>
-        where W: Write
-    {
-        write_map_len(wr, len)
-    }
-
-    fn write_field_name<W>(&self, wr: &mut W, _key: &str) -> Result<(), ValueWriteError>
-        where W: Write
-    {
-        write_str(wr, _key)
     }
 }
 
