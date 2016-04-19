@@ -66,6 +66,7 @@ struct ConnectionInfo {
     subscription_requests: Mutex<HashMap<ID, Subscription>>,
     subscriptions: Mutex<HashMap<ID, Subscription>>,
     protocol: String,
+    published_callback: Option<Box<fn(URI)>>
 }
 
 fn send_message(sender: &Mutex<client::Sender<stream::WebSocketStream>>, message: Message, protocol: &str) -> WampResult<()> {
@@ -196,7 +197,8 @@ impl Connection {
             subscription_requests: Mutex::new(HashMap::new()),
             subscriptions: Mutex::new(HashMap::new()),
             sender: Mutex::new(sender),
-            connection_state: Mutex::new(ConnectionState::Connected)
+            connection_state: Mutex::new(ConnectionState::Connected),
+            published_callback: None
         });
 
 
@@ -386,7 +388,7 @@ impl Client {
     pub fn publish(&mut self, topic: URI, args: List, kwargs: Dict) -> WampResult<()> {
         info!("Publishing to {:?} with {:?} | {:?}", topic, args, kwargs);
         let request_id = self.get_next_session_id();
-        self.send_message(Message::PublishKwArgs(request_id, PublishOptions::new(false), topic, args, kwargs))
+        self.send_message(Message::PublishKwArgs(request_id, PublishOptions::new(self.connection_info.published_callback.is_some()), topic, args, kwargs))
     }
 
     pub fn shutdown(&mut self) {
