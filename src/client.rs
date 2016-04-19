@@ -65,8 +65,9 @@ struct ConnectionInfo {
     sender: Mutex<client::Sender<stream::WebSocketStream>>,
     subscription_requests: Mutex<HashMap<ID, Subscription>>,
     subscriptions: Mutex<HashMap<ID, Subscription>>,
+    publish_ids: Mutex<HashMap<ID, URI>>,
     protocol: String,
-    published_callback: Option<Box<fn(URI)>>
+    published_callback: Option<Box<fn(&URI)>>
 }
 
 fn send_message(sender: &Mutex<client::Sender<stream::WebSocketStream>>, message: Message, protocol: &str) -> WampResult<()> {
@@ -197,6 +198,7 @@ impl Connection {
             subscription_requests: Mutex::new(HashMap::new()),
             subscriptions: Mutex::new(HashMap::new()),
             sender: Mutex::new(sender),
+            publish_ids: Mutex::new(HashMap::new()),
             connection_state: Mutex::new(ConnectionState::Connected),
             published_callback: None
         });
@@ -338,6 +340,21 @@ impl Connection {
                     }
                 }
             },
+            Message::Published(request_id, _publication_id) => {
+                let ids = connection_info.publish_ids.lock().unwrap();
+                match ids.get(&request_id) {
+                    Some(ref topic) => {
+                        match connection_info.published_callback {
+                            Some(ref callback) => {
+                                callback(topic);
+                            },
+                            None => {}
+                        }
+                    },
+                    None => {}
+                }
+
+            }
             Message::Goodbye(_, reason) => {
                 match *connection_info.connection_state.lock().unwrap() {
                     ConnectionState::Connected => {
@@ -388,7 +405,12 @@ impl Client {
     pub fn publish(&mut self, topic: URI, args: List, kwargs: Dict) -> WampResult<()> {
         info!("Publishing to {:?} with {:?} | {:?}", topic, args, kwargs);
         let request_id = self.get_next_session_id();
-        self.send_message(Message::PublishKwArgs(request_id, PublishOptions::new(self.connection_info.published_callback.is_some()), topic, args, kwargs))
+        let request_acknowledge = self.connection_info.published_callback.is_some();
+        if request_acknowledge {
+            let mut ids = self.connection_info.publish_ids.lock().unwrap();
+            ids.insert(request_id, topic.clone());
+        }
+        self.send_message(Message::PublishKwArgs(request_id, PublishOptions::new(request_acknowledge), topic, args, kwargs))
     }
 
     pub fn shutdown(&mut self) {
