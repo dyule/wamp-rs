@@ -50,9 +50,9 @@ enum ConnectionState {
     Disconnected
 }
 
-unsafe impl <'a> Send for Subscription {}
+unsafe impl <'a> Send for ConnectionInfo {}
 
-unsafe impl<'a> Sync for Subscription {}
+unsafe impl<'a> Sync for ConnectionInfo {}
 
 pub struct Client {
     connection_info: Arc<ConnectionInfo>,
@@ -67,7 +67,7 @@ struct ConnectionInfo {
     subscriptions: Mutex<HashMap<ID, Subscription>>,
     publish_ids: Mutex<HashMap<ID, URI>>,
     protocol: String,
-    published_callback: Option<Box<fn(&URI)>>
+    published_callbacks: Mutex<Vec<Box<Fn(&URI)>>>
 }
 
 fn send_message(sender: &Mutex<client::Sender<stream::WebSocketStream>>, message: Message, protocol: &str) -> WampResult<()> {
@@ -200,7 +200,7 @@ impl Connection {
             sender: Mutex::new(sender),
             publish_ids: Mutex::new(HashMap::new()),
             connection_state: Mutex::new(ConnectionState::Connected),
-            published_callback: None
+            published_callbacks: Mutex::new(Vec::new())
         });
 
 
@@ -306,30 +306,9 @@ impl Connection {
                 }
 
             },
-            Message::Event(subscription_id, _, _) => {
-                match connection_info.subscriptions.lock().unwrap().get(&subscription_id) {
-                    Some(subscription) => {
-                        let ref callback = subscription.callback;
-                        callback(Vec::new(), HashMap::new());
-                    },
-                    None => {
-                        warn!("Recieved an event for a subscription we don't have.  ID: {}", subscription_id);
-                    }
-                }
-            },
-            Message::EventArgs(subscription_id, _, _, args) => {
-                match connection_info.subscriptions.lock().unwrap().get(&subscription_id) {
-                    Some(subscription) => {
-                        let ref callback = subscription.callback;
-                        callback(args, HashMap::new());
-                    },
-                    None => {
-                        warn!("Recieved an event for a subscription we don't have.  ID: {}", subscription_id);
-                    }
-                }
-
-            },
-            Message::EventKwArgs(subscription_id, _, _, args, kwargs) => {
+            Message::Event(subscription_id, _, _, args, kwargs) => {
+                let args = args.unwrap_or(Vec::new());
+                let kwargs = kwargs.unwrap_or(HashMap::new());
                 match connection_info.subscriptions.lock().unwrap().get(&subscription_id) {
                     Some(subscription) => {
                         let ref callback = subscription.callback;
@@ -344,11 +323,8 @@ impl Connection {
                 let ids = connection_info.publish_ids.lock().unwrap();
                 match ids.get(&request_id) {
                     Some(ref topic) => {
-                        match connection_info.published_callback {
-                            Some(ref callback) => {
-                                callback(topic);
-                            },
-                            None => {}
+                        for callback in connection_info.published_callbacks.lock().unwrap().iter() {
+                            callback(topic);
                         }
                     },
                     None => {}
@@ -402,15 +378,20 @@ impl Client {
         self.send_message(Message::Subscribe(request_id, SubscribeOptions::new(), topic))
     }
 
-    pub fn publish(&mut self, topic: URI, args: List, kwargs: Dict) -> WampResult<()> {
+    pub fn on_published(&mut self, callback: Box<Fn(&URI)>) {
+        self.connection_info.published_callbacks.lock().unwrap().push(callback);
+    }
+
+    pub fn publish(&mut self, topic: URI, args: Option<List>, kwargs: Option<Dict>) -> WampResult<()> {
         info!("Publishing to {:?} with {:?} | {:?}", topic, args, kwargs);
         let request_id = self.get_next_session_id();
-        let request_acknowledge = self.connection_info.published_callback.is_some();
+        let request_acknowledge = self.connection_info.published_callbacks.lock().unwrap().len() > 0;
         if request_acknowledge {
+            debug!("Requesting acknowledgement");
             let mut ids = self.connection_info.publish_ids.lock().unwrap();
             ids.insert(request_id, topic.clone());
         }
-        self.send_message(Message::PublishKwArgs(request_id, PublishOptions::new(request_acknowledge), topic, args, kwargs))
+        self.send_message(Message::Publish(request_id, PublishOptions::new(request_acknowledge), topic, args, kwargs))
     }
 
     pub fn shutdown(&mut self) {

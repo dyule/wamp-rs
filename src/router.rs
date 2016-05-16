@@ -65,7 +65,7 @@ fn random_id() -> u64 {
     between.ind_sample(&mut rng)
 }
 
-fn send_message(info: &Arc<RefCell<ConnectionInfo>>, message: Message) -> Result<()> {
+fn send_message(info: &Arc<RefCell<ConnectionInfo>>, message: &Message) -> Result<()> {
     let info = info.borrow();
 
     debug!("Sending message {:?} via {}", message, info.protocol);
@@ -76,13 +76,13 @@ fn send_message(info: &Arc<RefCell<ConnectionInfo>>, message: Message) -> Result
     }
 }
 
-fn send_message_json(sender: &Sender, message: Message) -> Result<()> {
+fn send_message_json(sender: &Sender, message: &Message) -> Result<()> {
     // Send the message
-    sender.send(WSMessage::Text(serde_json::to_string(&message).unwrap()))
+    sender.send(WSMessage::Text(serde_json::to_string(message).unwrap()))
 
 }
 
-fn send_message_msgpack(sender: &Sender, message: Message) -> Result<()> {
+fn send_message_msgpack(sender: &Sender, message: &Message) -> Result<()> {
 
     // Send the message
     let mut buf: Vec<u8> = Vec::new();
@@ -145,14 +145,8 @@ impl ConnectionHandler{
             Message::Subscribe(request_id, options, topic) => {
                 self.handle_subscribe(request_id,  options, topic)
             },
-            Message::Publish(request_id, options, topic) => {
-                self.handle_publish(request_id, options, topic, None, None)
-            },
-            Message::PublishArgs(request_id, options, topic, args) => {
-                self.handle_publish(request_id, options, topic, Some(args), None)
-            },
-            Message::PublishKwArgs(request_id, options, topic, args, kwargs) => {
-                self.handle_publish(request_id, options, topic, Some(args), Some(kwargs))
+            Message::Publish(request_id, options, topic, args, kwargs) => {
+                self.handle_publish(request_id, options, topic, args, kwargs)
             },
             _ => {
                 Err(Error::new(ErrorKind::Internal, format!("Invalid message type: {:?}", message)))
@@ -167,7 +161,7 @@ impl ConnectionHandler{
         }
         try!(self.set_realm(realm.uri));
         let id = {self.info.borrow().id};
-        send_message(&self.info, Message::Welcome(id, WelcomeDetails::new(RouterRoles::new())))
+        send_message(&self.info, &Message::Welcome(id, WelcomeDetails::new(RouterRoles::new())))
     }
 
     fn handle_subscribe(&mut self, request_id: u64, _options: SubscribeOptions, topic: URI) -> Result<()> {
@@ -181,7 +175,7 @@ impl ConnectionHandler{
                     subscribers: Vec::new(),
                 });
                 topic.subscribers.push(self.info.clone());
-                send_message(&self.info, Message::Subscribed(request_id, topic.id))
+                send_message(&self.info, &Message::Subscribed(request_id, topic.id))
             },
              None => {
                 // TODO But actually handle the eror here
@@ -203,32 +197,11 @@ impl ConnectionHandler{
                 let topic_id = topic.id;
                 let publication_id = random_id();
                 if options.should_acknolwedge() {
-                    try!(send_message(&self.info, Message::Published(request_id, publication_id)));
+                    try!(send_message(&self.info, &Message::Published(request_id, publication_id)));
                 }
+                let event_message = Message::Event(topic_id, publication_id, EventDetails::new(), args, kwargs);
                 for subscriber in topic.subscribers.iter() {
-                    // XXX See if there is a way to avoid copying arguments here
-                    match kwargs {
-                        Some(ref kwargs) => {
-                            match args {
-                                Some(ref args) => {
-                                    try!(send_message(subscriber, Message::EventKwArgs(topic_id, publication_id, EventDetails::new(), args.clone(), kwargs.clone())));
-                                },
-                                None => {
-                                    try!(send_message(subscriber, Message::EventKwArgs(topic_id, publication_id, EventDetails::new(), Vec::new(), kwargs.clone())));
-                                }
-                            }
-                        },
-                        None => {
-                            match args {
-                                Some(ref args) => {
-                                    try!(send_message(subscriber, Message::EventArgs(topic_id, publication_id, EventDetails::new(), args.clone())));
-                                },
-                                None => {
-                                    try!(send_message(subscriber, Message::Event(topic_id, publication_id, EventDetails::new())));
-                                }
-                            }
-                        }
-                    }
+                    try!(send_message(subscriber, &event_message))
                 }
                 Ok(())
             },

@@ -4,6 +4,7 @@ use wamp::client::Connection;
 use wamp::{URI, Dict, List, Value};
 use std::env;
 use std::collections::HashMap;
+use std::thread::{current, park};
 
 #[macro_use]
 extern crate log;
@@ -34,6 +35,10 @@ fn main() {
     let connection = Connection::new("ws://127.0.0.1:8090/ws", "realm1");
     info!("Connecting");
     let mut client = connection.connect().unwrap();
+    let main_thread = current();
+    let published = move |topic:&URI| {
+        //main_thread.unpark()
+    };
     info!("Connected");
     let mut args = env::args();
     let _ = args.next().unwrap();
@@ -48,11 +53,10 @@ fn main() {
 
     } else if flag == "pub" {
         info!("Sending");
-        client.publish(URI::new("ca.dal.test.topic1"), vec![Value::Integer(5)], HashMap::new()).unwrap();
+        client.on_published(Box::new(published));
+        client.publish(URI::new("ca.dal.test.topic1"), Some(vec![Value::Integer(5)]), None).unwrap();
         info!("Sent");
-        loop {
-            
-        }
+        park()
     }
 
 

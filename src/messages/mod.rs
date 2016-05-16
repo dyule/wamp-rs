@@ -18,20 +18,33 @@ pub enum Message {
     Welcome(ID, WelcomeDetails),
     Abort(ErrorDetails, Reason),
     Goodbye(ErrorDetails, Reason),
-    Error(ErrorType, ID, Dict, Reason),
-    ErrorArgs(ErrorType, ID, Dict, Reason, List),
-    ErrorKwArgs(ErrorType, ID, Dict, Reason, List, Dict),
+    Error(ErrorType, ID, Dict, Reason, Option<List>, Option<Dict>),
     Subscribe(ID, SubscribeOptions, URI),
     Subscribed(ID, ID),
     Unsubscribe(ID, ID),
     Unsubscribed(ID),
-    Publish(ID, PublishOptions, URI),
-    PublishArgs(ID, PublishOptions, URI, List),
-    PublishKwArgs(ID, PublishOptions, URI, List, Dict),
+    Publish(ID, PublishOptions, URI, Option<List>, Option<Dict>),
     Published(ID, ID),
-    Event(ID, ID, EventDetails),
-    EventArgs(ID, ID, EventDetails, List),
-    EventKwArgs(ID, ID, EventDetails, List, Dict),
+    Event(ID, ID, EventDetails, Option<List>, Option<Dict>),
+}
+
+macro_rules! serialize_with_args {
+    ($args:expr, $kwargs:expr, $serializer:expr, $($item: expr),*) => (
+        match $kwargs {
+            &Some(ref kwargs) => {
+                match $args {
+                    &Some(ref args) => ( $($item,)* args, kwargs).serialize($serializer),
+                    &None           => ( $($item,)* Vec::<u8>::new(), kwargs).serialize($serializer),
+                }
+            }, &None => {
+                match $args {
+                    &Some(ref args) => ( $($item,)* args).serialize($serializer),
+                    &None           => ( $($item,)*).serialize($serializer),
+                }
+
+            }
+        }
+    );
 }
 
 impl serde::Serialize for Message {
@@ -51,14 +64,8 @@ impl serde::Serialize for Message {
             Message::Goodbye(ref details, ref reason) => {
                 (6, details, reason).serialize(serializer)
             },
-            Message::Error(ref ty, id, ref details, ref reason) => {
-                (8, ty, id, details, reason).serialize(serializer)
-            },
-            Message::ErrorArgs(ref ty, id, ref details, ref reason, ref args) => {
-                (8, ty, id, details, reason, args).serialize(serializer)
-            },
-            Message::ErrorKwArgs(ref ty, id, ref details, ref reason, ref args, ref kwargs) => {
-                (8, ty, id, details, reason, args, kwargs).serialize(serializer)
+            Message::Error(ref ty, id, ref details, ref reason, ref args, ref kwargs) => {
+                serialize_with_args!(args, kwargs, serializer, 8, ty, id, details, reason)
             },
             Message::Subscribe(request_id, ref options, ref topic) => {
                 (32, request_id, options, topic).serialize(serializer)
@@ -72,29 +79,15 @@ impl serde::Serialize for Message {
             Message::Unsubscribed(request_id) => {
                 (35, request_id).serialize(serializer)
             },
-            Message::Publish(id, ref details, ref topic) => {
-                (16, id, details, topic).serialize(serializer)
-            },
-            Message::PublishArgs(id, ref details, ref topic, ref args) => {
-                (16, id, details, topic, args).serialize(serializer)
-            },
-            Message::PublishKwArgs(id, ref details, ref topic, ref args, ref kwargs) => {
-                (16, id, details, topic, args, kwargs).serialize(serializer)
+            Message::Publish(id, ref details, ref topic, ref args, ref kwargs) => {
+                serialize_with_args!(args, kwargs, serializer, 16, id, details, topic)
             },
             Message::Published(request_id, publication_id) => {
                 (17, request_id, publication_id).serialize(serializer)
             },
-            Message::Event(subscription_id, publication_id, ref details) =>
+            Message::Event(subscription_id, publication_id, ref details, ref args, ref kwargs) =>
             {
-                (36, subscription_id, publication_id, details).serialize(serializer)
-            },
-            Message::EventArgs(subscription_id, publication_id, ref details, ref args) =>
-            {
-                (36, subscription_id, publication_id, details, args).serialize(serializer)
-            },
-            Message::EventKwArgs(subscription_id, publication_id, ref details, ref args, ref kwargs) =>
-            {
-                (36, subscription_id, publication_id, details, args, kwargs).serialize(serializer)
+                serialize_with_args!(args, kwargs, serializer, 36, subscription_id, publication_id, details)
             },
         }
     }
@@ -145,18 +138,10 @@ impl MessageVisitor {
         let id = try_or!(visitor.visit(), "Error message ended before session id");
         let details = try_or!(visitor.visit(), "Error message ended before details dict");
         let reason = try_or!(visitor.visit(), "Error message ended before reason uri");
-        if let Some(args) = try!(visitor.visit()) {
-            if let Some(kwargs) = try!(visitor.visit()) {
-                try!(visitor.end());
-                Ok( Message::ErrorKwArgs(message_type, id, details, reason, args, kwargs))
-            } else {
-                try!(visitor.end());
-                Ok( Message::ErrorArgs(message_type, id, details, reason, args))
-            }
-        } else {
-            try!(visitor.end());
-            Ok( Message::Error(message_type, id, details, reason))
-        }
+        let args = try!(visitor.visit());
+        let kwargs = try!(visitor.visit());
+        try!(visitor.end());
+        Ok( Message::Error(message_type, id, details, reason, args, kwargs))
 
     }
 
@@ -192,19 +177,10 @@ impl MessageVisitor {
         let id = try_or!(visitor.visit(), "Publish message ended before session id");
         let details = try_or!(visitor.visit(), "Publish message ended before details dict");
         let topic = try_or!(visitor.visit(), "Publish message ended before topic uri");
-        if let Some(args) = try!(visitor.visit()) {
-            if let Some(kwargs) = try!(visitor.visit()) {
-                try!(visitor.end());
-                Ok( Message::PublishKwArgs(id, details, topic, args, kwargs))
-            } else {
-                try!(visitor.end());
-                Ok( Message::PublishArgs(id, details, topic, args))
-            }
-        } else {
-            try!(visitor.end());
-            Ok( Message::Publish(id, details, topic))
-        }
-
+        let args = try!(visitor.visit());
+        let kwargs = try!(visitor.visit());
+        try!(visitor.end());
+        Ok(Message::Publish(id, details, topic, args, kwargs))
     }
 
     fn visit_published<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
@@ -218,19 +194,10 @@ impl MessageVisitor {
         let subscription_id = try_or!(visitor.visit(), "Event message ended before session subscription id");
         let publication_id = try_or!(visitor.visit(), "Event message ended before publication id");
         let details = try_or!(visitor.visit(), "Event message ended before details dict");
-        if let Some(args) = try!(visitor.visit()) {
-            if let Some(kwargs) = try!(visitor.visit()) {
-                try!(visitor.end());
-                Ok( Message::EventKwArgs(subscription_id, publication_id, details, args, kwargs))
-            } else {
-                try!(visitor.end());
-                Ok( Message::EventArgs(subscription_id, publication_id, details, args))
-            }
-        } else {
-            try!(visitor.end());
-            Ok( Message::Event(subscription_id, publication_id, details))
-        }
-
+        let args = try!(visitor.visit());
+        let kwargs = try!(visitor.visit());
+        try!(visitor.end());
+        Ok(Message::Event(subscription_id, publication_id, details, args, kwargs))
     }
 }
 
@@ -327,17 +294,17 @@ mod test {
     #[test]
     fn serialize_error() {
         two_way_test!(
-            Message::Error(ErrorType::Subscribe, 713845233, HashMap::new(), Reason::NotAuthorized),
+            Message::Error(ErrorType::Subscribe, 713845233, HashMap::new(), Reason::NotAuthorized, None, None),
             "[8,32,713845233,{},\"wamp.error.not_authorized\"]"
         );
 
         two_way_test!(
-            Message::ErrorArgs(ErrorType::Unsubscribe, 3746383, HashMap::new(), Reason::InvalidURI, Vec::new()),
+            Message::Error(ErrorType::Unsubscribe, 3746383, HashMap::new(), Reason::InvalidURI, Some(Vec::new()), None),
             "[8,34,3746383,{},\"wamp.error.invalid_uri\",[]]"
         );
 
         two_way_test!(
-            Message::ErrorKwArgs(ErrorType::Register, 8534533, HashMap::new(), Reason::InvalidArgument, Vec::new(), HashMap::new()),
+            Message::Error(ErrorType::Register, 8534533, HashMap::new(), Reason::InvalidArgument, Some(Vec::new()), Some(HashMap::new())),
             "[8,64,8534533,{},\"wamp.error.invalid_argument\",[],{}]"
         );
     }
@@ -377,18 +344,18 @@ mod test {
     #[test]
     fn serialize_publish() {
         two_way_test!(
-            Message::Publish(453453, PublishOptions::new(false), URI::new("ca.dal.test.topic1")),
+            Message::Publish(453453, PublishOptions::new(false), URI::new("ca.dal.test.topic1"), None, None),
             "[16,453453,{},\"ca.dal.test.topic1\"]"
         );
 
         two_way_test!(
-            Message::PublishArgs(23934583, PublishOptions::new(true), URI::new("ca.dal.test.topic2"), vec![Value::String("a value".to_string())]),
+            Message::Publish(23934583, PublishOptions::new(true), URI::new("ca.dal.test.topic2"), Some(vec![Value::String("a value".to_string())]), None),
             "[16,23934583,{\"acknolwedge\":true},\"ca.dal.test.topic2\",[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
         kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
         two_way_test!(
-            Message::PublishKwArgs(3243542, PublishOptions::new(true), URI::new("ca.dal.test.topic3"), Vec::new(), kwargs),
+            Message::Publish(3243542, PublishOptions::new(true), URI::new("ca.dal.test.topic3"), Some(Vec::new()), Some(kwargs)),
             "[16,3243542,{\"acknolwedge\":true},\"ca.dal.test.topic3\",[],{\"key1\":[5]}]"
         )
     }
@@ -404,18 +371,18 @@ mod test {
     #[test]
     fn serialize_event() {
         two_way_test!(
-            Message::Event(4353453, 298173, EventDetails::new()),
+            Message::Event(4353453, 298173, EventDetails::new(), None, None),
             "[36,4353453,298173,{}]"
         );
 
         two_way_test!(
-            Message::EventArgs(764346, 3895494, EventDetails::new(), vec![Value::String("a value".to_string())]),
+            Message::Event(764346, 3895494, EventDetails::new(), Some(vec![Value::String("a value".to_string())]), None),
             "[36,764346,3895494,{},[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
         kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
         two_way_test!(
-            Message::EventKwArgs(65675, 587495, EventDetails::new(), Vec::new(), kwargs),
+            Message::Event(65675, 587495, EventDetails::new(), Some(Vec::new()), Some(kwargs)),
             "[36,65675,587495,{},[],{\"key1\":[5]}]"
         )
     }
