@@ -18,6 +18,7 @@ use rmp_serde::Serializer;
 use utils::StructMapWriter;
 use std::io::Cursor;
 use rmp_serde::encode::VariantWriter;
+use eventual::{Complete, Future, Async};
 
 macro_rules! try_websocket {
     ($e: expr) => (
@@ -35,10 +36,14 @@ pub struct Connection {
     url: String
 }
 
-struct Subscription {
-    callback: Box<Fn(List, Dict)>
+pub struct Subscription {
+    pub topic: URI,
+    subscription_id: ID
 }
 
+struct CallbackWrapper {
+    callback: Box<Fn(List, Dict)>
+}
 
 static WAMP_JSON:&'static str = "wamp.2.json";
 static WAMP_MSGPACK:&'static str = "wamp.2.msgpack";
@@ -54,6 +59,10 @@ unsafe impl <'a> Send for ConnectionInfo {}
 
 unsafe impl<'a> Sync for ConnectionInfo {}
 
+unsafe impl <'a> Send for CallbackWrapper {}
+
+unsafe impl<'a> Sync for CallbackWrapper {}
+
 pub struct Client {
     connection_info: Arc<ConnectionInfo>,
     max_session_id: ID,
@@ -63,9 +72,10 @@ pub struct Client {
 struct ConnectionInfo {
     connection_state: Mutex<ConnectionState>,
     sender: Mutex<client::Sender<stream::WebSocketStream>>,
-    subscription_requests: Mutex<HashMap<ID, Subscription>>,
-    subscriptions: Mutex<HashMap<ID, Subscription>>,
-    publish_ids: Mutex<HashMap<ID, URI>>,
+    subscription_requests: Mutex<HashMap<ID, Complete<(ID, Arc<ConnectionInfo>), Error>>>,
+    unsubscription_requests: Mutex<HashMap<ID, Complete<Arc<ConnectionInfo>, Error>>>,
+    subscriptions: Mutex<HashMap<ID, CallbackWrapper>>,
+    publish_ids_to_topics: Mutex<HashMap<ID, URI>>,
     protocol: String,
     published_callbacks: Mutex<Vec<Box<Fn(&URI)>>>
 }
@@ -196,9 +206,10 @@ impl Connection {
         let info = Arc::new(ConnectionInfo {
             protocol: protocol,
             subscription_requests: Mutex::new(HashMap::new()),
+            unsubscription_requests: Mutex::new(HashMap::new()),
             subscriptions: Mutex::new(HashMap::new()),
             sender: Mutex::new(sender),
-            publish_ids: Mutex::new(HashMap::new()),
+            publish_ids_to_topics: Mutex::new(HashMap::new()),
             connection_state: Mutex::new(ConnectionState::Connected),
             published_callbacks: Mutex::new(Vec::new())
         });
@@ -296,15 +307,27 @@ impl Connection {
         match message {
             Message::Subscribed(request_id, subscription_id) => {
                 // TODO handle errors here
+                info!("Recieved a subscribed notification");
                 match connection_info.subscription_requests.lock().unwrap().remove(&request_id) {
-                    Some(subscription) => {
-                        connection_info.subscriptions.lock().unwrap().insert(subscription_id, subscription);
+                    Some(promise) => {
+                        debug!("Completing promise");
+                        promise.complete((subscription_id, connection_info.clone()))
                     },
                     None => {
-                        warn!("Recieved a subscribed notification for a subscription we don't have.  ID: {}", subscription_id);
+                        warn!("Recieved a subscribed notification for a subscription we don't have.  ID: {}", request_id);
                     }
                 }
 
+            },
+            Message::Unsubscribed(request_id) => {
+                match connection_info.unsubscription_requests.lock().unwrap().remove(&request_id) {
+                    Some(promise) => {
+                        promise.complete(connection_info.clone())
+                    },
+                    None => {
+                        warn!("Recieved a unsubscribed notification for a subscription we don't have.  ID: {}", request_id);
+                    }
+                }
             },
             Message::Event(subscription_id, _, _, args, kwargs) => {
                 let args = args.unwrap_or(Vec::new());
@@ -320,7 +343,7 @@ impl Connection {
                 }
             },
             Message::Published(request_id, _publication_id) => {
-                let ids = connection_info.publish_ids.lock().unwrap();
+                let ids = connection_info.publish_ids_to_topics.lock().unwrap();
                 match ids.get(&request_id) {
                     Some(ref topic) => {
                         for callback in connection_info.published_callbacks.lock().unwrap().iter() {
@@ -371,11 +394,33 @@ impl Client {
         self.max_session_id
     }
 
-    pub fn subscribe(&mut self, topic: URI, callback: Box<Fn(List, Dict)>) -> WampResult<()> {
+    pub fn subscribe(&mut self, topic: URI, callback: Box<Fn(List, Dict)>) -> WampResult<Future<Subscription, Error>> {
         // Send a subscribe messages
         let request_id = self.get_next_session_id();
-        self.connection_info.subscription_requests.lock().unwrap().insert(request_id, Subscription{callback: callback});
-        self.send_message(Message::Subscribe(request_id, SubscribeOptions::new(), topic))
+        let (complete, future) = Future::<(ID, Arc<ConnectionInfo>), Error>::pair();
+        let the_topic = topic.clone();
+        let callback = CallbackWrapper {callback: callback};
+        let future = future.and_then(move |(subscription_id, info): (ID, Arc<ConnectionInfo>)| {
+            debug!("Inserting subscription");
+            info.subscriptions.lock().unwrap().insert(subscription_id, callback);
+             Ok(Subscription{topic: the_topic, subscription_id: subscription_id})
+        });
+        self.connection_info.subscription_requests.lock().unwrap().insert(request_id, complete);
+        try!(self.send_message(Message::Subscribe(request_id, SubscribeOptions::new(), topic)));
+        Ok(future)
+    }
+
+    pub fn unsubscribe(&mut self, subscription: Subscription) -> WampResult<Future<(), Error>> {
+        self.connection_info.subscription_requests.lock().unwrap();
+
+        let request_id = self.get_next_session_id();
+        try!(self.send_message(Message::Unsubscribe(request_id, subscription.subscription_id)));
+        let (complete, future) = Future::<Arc<ConnectionInfo>, Error>::pair();
+        self.connection_info.unsubscription_requests.lock().unwrap().insert(request_id, complete);
+        Ok(future.and_then(move |info| {
+            info.subscriptions.lock().unwrap().remove(&subscription.subscription_id);
+            Ok(())
+        }))
     }
 
     pub fn on_published(&mut self, callback: Box<Fn(&URI)>) {
@@ -388,7 +433,7 @@ impl Client {
         let request_acknowledge = self.connection_info.published_callbacks.lock().unwrap().len() > 0;
         if request_acknowledge {
             debug!("Requesting acknowledgement");
-            let mut ids = self.connection_info.publish_ids.lock().unwrap();
+            let mut ids = self.connection_info.publish_ids_to_topics.lock().unwrap();
             ids.insert(request_id, topic.clone());
         }
         self.send_message(Message::Publish(request_id, PublishOptions::new(request_acknowledge), topic, args, kwargs))

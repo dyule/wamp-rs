@@ -148,6 +148,9 @@ impl ConnectionHandler{
             Message::Publish(request_id, options, topic, args, kwargs) => {
                 self.handle_publish(request_id, options, topic, args, kwargs)
             },
+            Message::Unsubscribe(request_id, topic_id) => {
+                self.handle_unsubscribe(request_id, topic_id)
+            },
             _ => {
                 Err(Error::new(ErrorKind::Internal, format!("Invalid message type: {:?}", message)))
             }
@@ -168,17 +171,45 @@ impl ConnectionHandler{
         debug!("Responding to subscribe message (id: {}, topic: {})", request_id, topic.uri);
         match self.realm {
             Some(ref realm) => {
-                let realm = realm.borrow();
-                let mut subscriptions = realm.subscriptions.lock().unwrap();
-                let mut topic = subscriptions.entry(topic.uri).or_insert(Topic {
-                    id: random_id(),
-                    subscribers: Vec::new(),
-                });
-                topic.subscribers.push(self.info.clone());
-                send_message(&self.info, &Message::Subscribed(request_id, topic.id))
+                let topic_uri = topic.uri.clone();
+                let topic_id = {
+                    let mut realm = realm.borrow();
+                    let mut subscriptions = realm.subscriptions.lock().unwrap();
+                    let mut topic = subscriptions.entry(topic.uri).or_insert(Topic {
+                        id: random_id(),
+                        subscribers: Vec::new(),
+                    });
+                    topic.subscribers.push(self.info.clone());
+                    topic.id
+                };
+                realm.borrow_mut().subscription_ids_to_uris.insert(topic_id, topic_uri);
+                send_message(&self.info, &Message::Subscribed(request_id, topic_id))
             },
              None => {
                 // TODO But actually handle the eror here
+                Ok(())
+            }
+        }
+    }
+
+    fn handle_unsubscribe(&mut self, request_id: u64, topic_id: u64) -> Result<()> {
+        match self.realm {
+            Some(ref realm) => {
+                let realm = realm.borrow();
+                let mut subscriptions = realm.subscriptions.lock().unwrap();
+                let topic_uri = match realm.subscription_ids_to_uris.get(&topic_id) {
+                    Some(uri) => uri,
+                    None      => return Err(Error::new(ErrorKind::Internal, "No topic with that id"))
+                };
+                let mut topic = subscriptions.get_mut(topic_uri).unwrap();
+                let my_id = self.info.borrow().id;
+                topic.subscribers.retain(|subscriber| {
+                    subscriber.borrow().id != my_id
+                });
+                Ok(())
+            },
+            None => {
+                // TODO But actually handle the error here
                 Ok(())
             }
         }
@@ -211,6 +242,8 @@ impl ConnectionHandler{
             }
         }
     }
+
+
 
     fn set_realm(&mut self, realm: String) -> Result<()> {
         debug!("Setting realm to {}", realm);

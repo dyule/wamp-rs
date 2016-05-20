@@ -27,3 +27,4 @@ rmp = {version = "0.7"}
 rmp-serde = {version = "0.9"}
 ws = "0.4"
 rand = "0.3"
+eventual = "0.1.7"

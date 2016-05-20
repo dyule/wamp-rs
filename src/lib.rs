@@ -9,6 +9,7 @@ extern crate url;
 extern crate rmp;
 extern crate rmp_serde;
 extern crate rand;
+extern crate eventual;
 
 #[macro_use]
 extern crate log;
@@ -44,6 +45,7 @@ pub enum ErrorKind {
     JSONError(JSONError),
     MsgPackError(MsgPackError),
     MalformedData,
+    UnknownTopic(String),
 }
 impl Error {
     fn new(kind: ErrorKind) -> Error {
@@ -75,6 +77,7 @@ impl ErrorKind {
             &ErrorKind::JSONError(ref e) => e.to_string(),
             &ErrorKind::MsgPackError(ref e) => e.to_string(),
             &ErrorKind::MalformedData => "Malformed Data".to_string(),
+            &ErrorKind::UnknownTopic(ref s) => s.clone(),
         }
     }
 }
