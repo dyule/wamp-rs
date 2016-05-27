@@ -10,6 +10,7 @@ use serde_json;
 use serde::{Deserialize, Serialize};
 use std::str::from_utf8;
 use std::fmt;
+use std::time::Duration;
 use ::{WampResult, Error, ErrorKind};
 use std::thread::{self, JoinHandle};
 use std::sync::{Mutex, Arc};
@@ -77,11 +78,12 @@ struct ConnectionInfo {
     subscriptions: Mutex<HashMap<ID, CallbackWrapper>>,
     publish_ids_to_topics: Mutex<HashMap<ID, URI>>,
     protocol: String,
-    published_callbacks: Mutex<Vec<Box<Fn(&URI)>>>
+    published_callbacks: Mutex<Vec<Box<Fn(&URI)>>>,
+    shutdown_complete: Mutex<Option<Complete<(), Error>>>
 }
 
 fn send_message(sender: &Mutex<client::Sender<stream::WebSocketStream>>, message: Message, protocol: &str) -> WampResult<()> {
-    info!("Sending message {:?}", message);
+    debug!("Sending message {:?}", message);
     if protocol == WAMP_MSGPACK {
         send_message_msgpack(sender, message)
     } else {
@@ -211,12 +213,14 @@ impl Connection {
             sender: Mutex::new(sender),
             publish_ids_to_topics: Mutex::new(HashMap::new()),
             connection_state: Mutex::new(ConnectionState::Connected),
-            published_callbacks: Mutex::new(Vec::new())
+            published_callbacks: Mutex::new(Vec::new()),
+            shutdown_complete: Mutex::new(None)
         });
 
 
         let hello_message = Message::Hello(self.realm.clone(), HelloDetails::new(ClientRoles::new()));
         debug!("Sending Hello message");
+        thread::sleep(Duration::from_millis(200));
         send_message(&info.sender, hello_message, &info.protocol).unwrap();
         debug!("Awaiting welcome message");
         let welcome_message = try!(handle_welcome_message(&mut receiver, &info.sender));
@@ -235,7 +239,7 @@ impl Connection {
         Ok(Client {
             connection_info: info,
             id: session_id,
-            max_session_id: 0
+            max_session_id: 0,
         })
     }
 
@@ -297,9 +301,19 @@ impl Connection {
                     }
                 }
             }
-            connection_info.sender.lock().unwrap().shutdown().ok();
-            receiver.shutdown().ok();
             *connection_info.connection_state.lock().unwrap() = ConnectionState::Disconnected;
+            {
+                let mut sender = connection_info.sender.lock().unwrap();
+                let _ = sender.send_message(&WSMessage::close()).unwrap();
+                sender.shutdown().ok();
+            }
+            receiver.shutdown().ok();
+            match connection_info.shutdown_complete.lock().unwrap().take() {
+                Some(promise) => {
+                    promise.complete(());
+                },
+                None => {}
+            };
         })
     }
 
@@ -363,6 +377,11 @@ impl Connection {
                     },
                     ConnectionState::ShuttingDown => {
                         // The router has seen our goodbye message and has responded in kind
+                        info!("Router acknolwedged disconnect");
+                        match connection_info.shutdown_complete.lock().unwrap().take() {
+                            Some(promise) => promise.complete(()),
+                            None          => {}
+                        }
                         return false;
                     },
                     ConnectionState::Disconnected => {
@@ -439,11 +458,17 @@ impl Client {
         self.send_message(Message::Publish(request_id, PublishOptions::new(request_acknowledge), topic, args, kwargs))
     }
 
-    pub fn shutdown(&mut self) {
+    pub fn shutdown(&mut self) -> WampResult<Future<(), Error>> {
         let mut state = self.connection_info.connection_state.lock().unwrap();
         if *state == ConnectionState::Connected {
-            self.send_message(Message::Goodbye(ErrorDetails::new(), Reason::SystemShutdown)).ok();
             *state = ConnectionState::ShuttingDown;
+            let (complete, future) = Future::pair();
+            *self.connection_info.shutdown_complete.lock().unwrap() = Some(complete);
+            // TODO add timeout in case server doesn't respond.
+            try!(self.send_message(Message::Goodbye(ErrorDetails::new(), Reason::SystemShutdown)));
+            Ok(future)
+        } else {
+            Err(Error::new(ErrorKind::InvalidState("Tried to shut down a client that was already shutting down".to_string())))
         }
     }
 }

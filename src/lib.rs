@@ -46,6 +46,7 @@ pub enum ErrorKind {
     MsgPackError(MsgPackError),
     MalformedData,
     UnknownTopic(String),
+    InvalidState(String),
 }
 impl Error {
     fn new(kind: ErrorKind) -> Error {
@@ -78,6 +79,7 @@ impl ErrorKind {
             &ErrorKind::MsgPackError(ref e) => e.to_string(),
             &ErrorKind::MalformedData => "Malformed Data".to_string(),
             &ErrorKind::UnknownTopic(ref s) => s.clone(),
+            &ErrorKind::InvalidState(ref s) => s.clone(),
         }
     }
 }

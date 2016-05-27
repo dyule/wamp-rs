@@ -12,35 +12,22 @@ use eventual::Async;
 
 #[macro_use]
 extern crate log;
+extern crate env_logger;
 
-use log::{LogRecord, LogLevel, LogMetadata};
-
-struct SimpleLogger;
-
-impl log::Log for SimpleLogger {
-    fn enabled(&self, metadata: &LogMetadata) -> bool {
-        metadata.level() <= LogLevel::Debug
-    }
-
-    fn log(&self, record: &LogRecord) {
-        if self.enabled(record.metadata()) && record.location().module_path().starts_with("wamp") {
-            println!("{} - {} ", record.level(), record.args());
-        }
-    }
-}
 
 enum Command {
     Sub,
     Pub,
     Unsub,
     List,
+    Help,
     Quit,
     NoOp,
     Invalid(String)
 }
 
 fn print_prompt() {
-    println!("Enter a command");
+    println!("Enter a command (or type \"help\")");
 }
 
 fn get_input_from_user() -> String {
@@ -60,6 +47,7 @@ fn process_input(input: String) -> (Command, Vec<String>) {
         "sub" => Command::Sub,
         "unsub" => Command::Unsub,
         "list" => Command::List,
+        "help" => Command::Help,
         "quit" => Command::Quit,
         "" => Command::NoOp,
         x => Command::Invalid(x.to_string())
@@ -116,7 +104,7 @@ fn unsubscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscripti
     };
 }
 
-fn list(subscriptions: &mut Arc<Mutex<Vec<Subscription>>>) {
+fn list(subscriptions: &Arc<Mutex<Vec<Subscription>>>) {
     let subscriptions = subscriptions.lock().unwrap();
     for (index, subscription) in subscriptions.iter().enumerate() {
         println!("{} {}", index, subscription.topic.uri);
@@ -138,6 +126,21 @@ fn publish(client: &mut Client, args: Vec<String>) {
     client.publish(URI::new(&topic_arr[0]), Some(args), None);
 }
 
+fn help() {
+    println!("The following commands are supported:");
+    println!("  sub <topic>", );
+    println!("       Subscribes to the topic specified by the uri <topic>");
+    println!("  pub <topic>, <args>*", );
+    println!("       Publishes to the topic specified by uri <topic>");
+    println!("       <args> is an optinal, comma separated list of arguments");
+    println!("  list");
+    println!("       Lists all of the current subscriptions, along with their index");
+    println!("  unsub <index>");
+    println!("       Unsubscribes from the topic subscription specified by the given index");
+    println!("  quit");
+    println!("       Sends a goodbye message and quits the program");
+}
+
 fn event_loop(mut client: Client) {
     let mut subscriptions = Arc::new(Mutex::new(Vec::new()));
     loop {
@@ -148,54 +151,24 @@ fn event_loop(mut client: Client) {
             Command::Sub => subscribe(&mut client, &mut subscriptions, args),
             Command::Pub => publish(&mut client, args),
             Command::Unsub => unsubscribe(&mut client, &mut subscriptions, args),
-            Command::List => list(&mut subscriptions),
+            Command::List => list(&subscriptions),
+            Command::Help => help(),
             Command::Quit => break,
             Command::NoOp => {},
             Command::Invalid(bad_command) => print!("Invalid command: {}", bad_command)
         }
     }
-    client.shutdown();
+    client.shutdown().unwrap().await().unwrap();
 
 }
 
 
 fn main() {
-    log::set_logger(|max_log_level| {
-        max_log_level.set(log::LogLevelFilter::Debug);
-        Box::new(SimpleLogger)
-    }).unwrap();
+    env_logger::init().unwrap();
     let connection = Connection::new("ws://127.0.0.1:8090/ws", "realm1");
     info!("Connecting");
     let mut client = connection.connect().unwrap();
-    // let main_thread = current();
-    // let published = move |topic:&URI| {
-    //     //main_thread.unpark()
-    // };
+
     info!("Connected");
     event_loop(client);
-    // let mut args = env::args();
-    // let _ = args.next().unwrap();
-    // let flag = args.next().unwrap();
-    // if flag == "sub" {
-    //     info!("Subscribing");
-    //     client.subscribe(URI::new("ca.dal.test.topic1"), Box::new(callback)).unwrap();
-    //     info!("Waiting");
-    //     loop {
-    //
-    //     }
-    //
-    // } else if flag == "pub" {
-    //     info!("Sending");
-    //     client.on_published(Box::new(published));
-    //     client.publish(URI::new("ca.dal.test.topic1"), Some(vec![Value::Integer(5)]), None).unwrap();
-    //     info!("Sent");
-    //     park()
-    // }
-
-
-
-}
-
-fn callback(args: List, kwargs: Dict) {
-    info!("args: {:?}, kwargs: {:?}", args, kwargs);
 }

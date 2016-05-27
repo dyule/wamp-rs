@@ -23,6 +23,7 @@ serde_macros = { version = "*", optional = true }
 websocket = "0.15.1"
 url = "*"
 log = "0.3"
+env_logger = "0.3"
 rmp = {version = "0.7"}
 rmp-serde = {version = "0.9"}
 ws = "0.4"
