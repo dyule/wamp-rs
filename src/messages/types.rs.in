@@ -144,7 +144,7 @@ pub struct PublisherRole {
     #[serde(skip_serializing, default)]
     feature: Option<String>
 }
-
+ 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct SubscriberRole {
     #[serde(skip_serializing, default)]

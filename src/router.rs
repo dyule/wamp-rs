@@ -13,7 +13,6 @@ use ::{List, Dict};
 use std::marker::PhantomData;
 use rand::{thread_rng};
 use rand::distributions::{Range, IndependentSample};
-use std::result::Result as StdResult;
 
 struct SubscriptionManager {
     subscriptions : HashMap<String, Topic>,
@@ -222,7 +221,7 @@ impl ConnectionHandler{
                 self.info.borrow_mut().subscribed_topics.retain(|id| {
                     *id != topic_id
                 });
-                Ok(())
+                send_message(&self.info, &Message::Unsubscribed(request_id))
             },
             None => {
                 // TODO But actually handle the error here
@@ -267,6 +266,7 @@ impl ConnectionHandler{
                 Err(Error::new(ErrorKind::Internal, "Recieved a goodbye message before handshake complete"))
             },
             ConnectionState::Connected => {
+                info!("Recieved goobye message with reason: {:?}", reason);
                 self.remove();
                 send_message(&self.info, &Message::Goodbye(ErrorDetails::new(), Reason::GoodbyeAndOut)).ok();
                 let mut info = self.info.borrow_mut();
@@ -274,6 +274,7 @@ impl ConnectionHandler{
                 info.sender.close(CloseCode::Normal)
             },
             ConnectionState::ShuttingDown => {
+                info!("Recieved goobye message in response to our goodbye message with reason: {:?}", reason);
                 let mut info = self.info.borrow_mut();
                 info.state = ConnectionState::Disconnected;
                 info.sender.close(CloseCode::Normal)

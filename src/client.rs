@@ -18,7 +18,6 @@ use rmp_serde::Deserializer as RMPDeserializer;
 use rmp_serde::Serializer;
 use utils::StructMapWriter;
 use std::io::Cursor;
-use rmp_serde::encode::VariantWriter;
 use eventual::{Complete, Future, Async};
 
 macro_rules! try_websocket {
@@ -76,9 +75,8 @@ struct ConnectionInfo {
     subscription_requests: Mutex<HashMap<ID, Complete<(ID, Arc<ConnectionInfo>), Error>>>,
     unsubscription_requests: Mutex<HashMap<ID, Complete<Arc<ConnectionInfo>, Error>>>,
     subscriptions: Mutex<HashMap<ID, CallbackWrapper>>,
-    publish_ids_to_topics: Mutex<HashMap<ID, URI>>,
     protocol: String,
-    published_callbacks: Mutex<Vec<Box<Fn(&URI)>>>,
+    published_callbacks: Mutex<HashMap<ID, Complete<ID, Error>>>,
     shutdown_complete: Mutex<Option<Complete<(), Error>>>
 }
 
@@ -211,9 +209,8 @@ impl Connection {
             unsubscription_requests: Mutex::new(HashMap::new()),
             subscriptions: Mutex::new(HashMap::new()),
             sender: Mutex::new(sender),
-            publish_ids_to_topics: Mutex::new(HashMap::new()),
             connection_state: Mutex::new(ConnectionState::Connected),
-            published_callbacks: Mutex::new(Vec::new()),
+            published_callbacks: Mutex::new(HashMap::new()),
             shutdown_complete: Mutex::new(None)
         });
 
@@ -318,6 +315,7 @@ impl Connection {
     }
 
     fn handle_message(message: Message, connection_info: &mut Arc<ConnectionInfo>) -> bool {
+        debug!("Recieved a message from the server: {:?}", message);
         match message {
             Message::Subscribed(request_id, subscription_id) => {
                 // TODO handle errors here
@@ -356,15 +354,14 @@ impl Connection {
                     }
                 }
             },
-            Message::Published(request_id, _publication_id) => {
-                let ids = connection_info.publish_ids_to_topics.lock().unwrap();
-                match ids.get(&request_id) {
-                    Some(ref topic) => {
-                        for callback in connection_info.published_callbacks.lock().unwrap().iter() {
-                            callback(topic);
-                        }
+            Message::Published(request_id, publication_id) => {
+                match connection_info.published_callbacks.lock().unwrap().remove(&request_id) {
+                    Some(promise) => {
+                        promise.complete(publication_id);
                     },
-                    None => {}
+                    None => {
+                        warn!("Recieved published notification for a request we weren't tracking: {}", request_id)
+                    }
                 }
 
             }
@@ -420,7 +417,6 @@ impl Client {
         let the_topic = topic.clone();
         let callback = CallbackWrapper {callback: callback};
         let future = future.and_then(move |(subscription_id, info): (ID, Arc<ConnectionInfo>)| {
-            debug!("Inserting subscription");
             info.subscriptions.lock().unwrap().insert(subscription_id, callback);
              Ok(Subscription{topic: the_topic, subscription_id: subscription_id})
         });
@@ -430,8 +426,6 @@ impl Client {
     }
 
     pub fn unsubscribe(&mut self, subscription: Subscription) -> WampResult<Future<(), Error>> {
-        self.connection_info.subscription_requests.lock().unwrap();
-
         let request_id = self.get_next_session_id();
         try!(self.send_message(Message::Unsubscribe(request_id, subscription.subscription_id)));
         let (complete, future) = Future::<Arc<ConnectionInfo>, Error>::pair();
@@ -442,20 +436,20 @@ impl Client {
         }))
     }
 
-    pub fn on_published(&mut self, callback: Box<Fn(&URI)>) {
-        self.connection_info.published_callbacks.lock().unwrap().push(callback);
-    }
 
     pub fn publish(&mut self, topic: URI, args: Option<List>, kwargs: Option<Dict>) -> WampResult<()> {
         info!("Publishing to {:?} with {:?} | {:?}", topic, args, kwargs);
         let request_id = self.get_next_session_id();
-        let request_acknowledge = self.connection_info.published_callbacks.lock().unwrap().len() > 0;
-        if request_acknowledge {
-            debug!("Requesting acknowledgement");
-            let mut ids = self.connection_info.publish_ids_to_topics.lock().unwrap();
-            ids.insert(request_id, topic.clone());
-        }
-        self.send_message(Message::Publish(request_id, PublishOptions::new(request_acknowledge), topic, args, kwargs))
+        self.send_message(Message::Publish(request_id, PublishOptions::new(false), topic, args, kwargs))
+    }
+
+    pub fn publish_and_acknowledge(&mut self, topic: URI, args: Option<List>, kwargs: Option<Dict>) -> WampResult<Future<ID, Error>> {
+        info!("Publishing to {:?} with {:?} | {:?}", topic, args, kwargs);
+        let request_id = self.get_next_session_id();
+        let (complete, future) = Future::<ID, Error>::pair();
+        self.connection_info.published_callbacks.lock().unwrap().insert(request_id, complete);
+        try!(self.send_message(Message::Publish(request_id, PublishOptions::new(true), topic, args, kwargs)));
+        Ok(future)
     }
 
     pub fn shutdown(&mut self) -> WampResult<Future<(), Error>> {

@@ -2,10 +2,7 @@ extern crate wamp;
 extern crate eventual;
 extern crate serde;
 use wamp::client::{Connection, Client, Subscription};
-use wamp::{URI, Dict, List, Value};
-use std::env;
-use std::collections::HashMap;
-use std::thread::{current, park};
+use wamp::{URI, Value};
 use std::io;
 use std::sync::{Mutex, Arc};
 use eventual::Async;
@@ -67,14 +64,14 @@ fn subscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscription
         return;
     }
     let topic = args[0].clone();
-    let mut subscriptions = subscriptions.clone();
+    let subscriptions = subscriptions.clone();
     client.subscribe(URI::new(&topic), Box::new(move |args, kwargs|{
         println!("Recieved message on topic {} with args {:?} and kwargs {:?}", topic, args, kwargs);
     })).unwrap().and_then(move |subscription|{
         println!("Subscribed to topic {}", subscription.topic.uri);
         subscriptions.lock().unwrap().push(subscription);
         Ok(())
-    }).await();
+    }).await().unwrap();
 }
 
 fn unsubscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscription>>>, args: Vec<String>) {
@@ -84,7 +81,7 @@ fn unsubscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscripti
         println!("Please specify the topic to subscribe to");
         return;
     }
-    let topic = match args[0].parse::<usize>() {
+    match args[0].parse::<usize>() {
         Ok(i) => {
             let mut subscriptions = subscriptions.lock().unwrap();
             if i >= subscriptions.len() {
@@ -96,12 +93,12 @@ fn unsubscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscripti
             client.unsubscribe(subscription).unwrap().and_then(move |()| {
                 println!("Successfully unsubscribed from {}", topic);
                 Ok(())
-            });
+            }).await().unwrap();
         },
         Err(_) => {
             println!("Invalid subscription index: {}", args[0]);
         }
-    };
+    }
 }
 
 fn list(subscriptions: &Arc<Mutex<Vec<Subscription>>>) {
@@ -123,7 +120,7 @@ fn publish(client: &mut Client, args: Vec<String>) {
             Err(_) => Value::String(arg.clone())
         }
     }).collect();
-    client.publish(URI::new(&topic_arr[0]), Some(args), None);
+    client.publish_and_acknowledge(URI::new(&topic_arr[0]), Some(args), None).unwrap().await().unwrap();
 }
 
 fn help() {
@@ -167,7 +164,7 @@ fn main() {
     env_logger::init().unwrap();
     let connection = Connection::new("ws://127.0.0.1:8090/ws", "realm1");
     info!("Connecting");
-    let mut client = connection.connect().unwrap();
+    let client = connection.connect().unwrap();
 
     info!("Connected");
     event_loop(client);
