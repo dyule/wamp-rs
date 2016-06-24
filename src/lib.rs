@@ -26,9 +26,10 @@ use std::sync::mpsc::SendError;
 use serde_json::Error as JSONError;
 use rmp_serde::decode::Error as MsgPackError;
 
-pub use messages::{URI, Dict, List, Value};
+pub use messages::{URI, Dict, List, Value, Reason, MatchingPolicy};
 
 pub type WampResult<T> = Result<T, Error>;
+pub type ID = u64;
 
 #[derive(Debug)]
 pub struct Error {
@@ -47,6 +48,7 @@ pub enum ErrorKind {
     MalformedData,
     UnknownTopic(String),
     InvalidState(String),
+    ErrorReason(Reason)
 }
 impl Error {
     fn new(kind: ErrorKind) -> Error {
@@ -80,6 +82,7 @@ impl ErrorKind {
             &ErrorKind::MalformedData => "Malformed Data".to_string(),
             &ErrorKind::UnknownTopic(ref s) => s.clone(),
             &ErrorKind::InvalidState(ref s) => s.clone(),
+            &ErrorKind::ErrorReason(ref s) => s.to_string(),
         }
     }
 }

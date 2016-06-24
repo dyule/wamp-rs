@@ -1,6 +1,7 @@
 use serde;
 use serde::de::Deserialize;
 pub use messages::types::*;
+use ::ID;
 mod types;
 
 macro_rules! try_or {

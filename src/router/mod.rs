@@ -1,3 +1,5 @@
+pub mod patterns;
+
 use ws::{listen as ws_listen, Sender, Handler, Message as WSMessage, Result, Error, ErrorKind, Request, Response, CloseCode};
 use std::sync::{Arc, Mutex, RwLock};
 use std::cell::RefCell;
@@ -8,15 +10,16 @@ use rmp_serde::Deserializer as RMPDeserializer;
 use rmp_serde::Serializer;
 use utils::StructMapWriter;
 use std::io::Cursor;
-use messages::{Message, URI, HelloDetails, WelcomeDetails, RouterRoles, SubscribeOptions, PublishOptions, EventDetails, ErrorDetails, Reason, ID};
-use ::{List, Dict};
+use messages::{Message, URI, HelloDetails, WelcomeDetails, RouterRoles, SubscribeOptions, PublishOptions, EventDetails, ErrorDetails, Reason};
+use ::{List, Dict, ID, MatchingPolicy};
 use std::marker::PhantomData;
 use rand::{thread_rng};
 use rand::distributions::{Range, IndependentSample};
+use router::patterns::PatternNode;
 
 struct SubscriptionManager {
-    subscriptions : HashMap<String, Topic>,
-    subscription_ids_to_uris: HashMap<u64, String>, // Should only be accessed when the subscriptions mutex is open
+    subscriptions : PatternNode<Arc<RefCell<ConnectionInfo>>>,
+    subscription_ids_to_uris: HashMap<u64, (String, bool)>, // Should only be accessed when the subscriptions mutex is open
 }
 
 struct Realm {
@@ -34,18 +37,13 @@ struct RouterInfo {
 
 }
 
-struct Topic {
-    id: u64,
-    subscribers: Vec<Arc<RefCell<ConnectionInfo>>>
-}
-
 struct ConnectionHandler {
     info: Arc<RefCell<ConnectionInfo>>,
     router: Arc<RefCell<RouterInfo>>,
     realm: Option<Arc<RefCell<Realm>>>,
 }
 
-struct ConnectionInfo {
+pub struct ConnectionInfo {
     state: ConnectionState,
     sender: Sender,
     protocol: String,
@@ -133,7 +131,7 @@ impl Router {
         info.realms.insert(realm.to_string(), Arc::new(RefCell::new(Realm {
             connections: Vec::new(),
             subscription_manager: Mutex::new(SubscriptionManager {
-                subscriptions: HashMap::new(),
+                subscriptions: PatternNode::new(),
                 subscription_ids_to_uris: HashMap::new()
             })
         })));
@@ -178,23 +176,19 @@ impl ConnectionHandler{
         send_message(&self.info, &Message::Welcome(id, WelcomeDetails::new(RouterRoles::new())))
     }
 
-    fn handle_subscribe(&mut self, request_id: u64, _options: SubscribeOptions, topic: URI) -> Result<()> {
+    fn handle_subscribe(&mut self, request_id: u64, options: SubscribeOptions, topic: URI) -> Result<()> {
         debug!("Responding to subscribe message (id: {}, topic: {})", request_id, topic.uri);
         match self.realm {
             Some(ref realm) => {
-                let topic_uri = topic.uri.clone();
                 let realm = realm.borrow();
                 let mut manager = realm.subscription_manager.lock().unwrap();
                 let topic_id = {
-                    let mut topic = manager.subscriptions.entry(topic.uri).or_insert(Topic {
-                        id: random_id(),
-                        subscribers: Vec::new(),
-                    });
-                    self.info.borrow_mut().subscribed_topics.push(topic.id);
-                    topic.subscribers.push(self.info.clone());
-                    topic.id
+                    // TODO fix the error issues so that we can just try! this
+                    let topic_id = manager.subscriptions.subscribe_with(&topic, self.info.clone(), options.pattern_match.clone()).unwrap();
+                    self.info.borrow_mut().subscribed_topics.push(topic_id);
+                    topic_id
                 };
-                manager.subscription_ids_to_uris.insert(topic_id, topic_uri);
+                manager.subscription_ids_to_uris.insert(topic_id, (topic.uri, options.pattern_match == MatchingPolicy::Prefix));
                 send_message(&self.info, &Message::Subscribed(request_id, topic_id))
             },
              None => {
@@ -209,15 +203,15 @@ impl ConnectionHandler{
             Some(ref realm) => {
                 let realm = realm.borrow();
                 let mut manager = realm.subscription_manager.lock().unwrap();
-                let topic_uri = match manager.subscription_ids_to_uris.get(&topic_id) {
-                    Some(uri) => uri,
-                    None      => return Err(Error::new(ErrorKind::Internal, "No topic with that id"))
-                }.clone();
-                let mut topic = manager.subscriptions.get_mut(&topic_uri).unwrap();
-                let my_id = self.info.borrow().id;
-                topic.subscribers.retain(|subscriber| {
-                    subscriber.borrow().id != my_id
-                });
+                let (topic_uri, is_prefix) = {
+                        match manager.subscription_ids_to_uris.get(&topic_id) {
+                        Some(&(ref uri, ref is_prefix)) => (uri.clone(), is_prefix.clone()),
+                        None      => return Err(Error::new(ErrorKind::Internal, "No topic with that id"))
+                    }
+                };
+
+                // TODO Also fix this error situation
+                let topic_id = manager.subscriptions.unsubscribe_with(&topic_uri, &self.info, is_prefix).unwrap();
                 self.info.borrow_mut().subscribed_topics.retain(|id| {
                     *id != topic_id
                 });
@@ -236,18 +230,24 @@ impl ConnectionHandler{
             Some(ref realm) => {
                 let realm = realm.borrow();
                 let manager = realm.subscription_manager.lock().unwrap();
-                let topic = match manager.subscriptions.get(&topic.uri) {
-                    Some(topic) => topic,
-                    None => return Err(Error::new(ErrorKind::Internal, "No topic with that name"))
-                };
-                let topic_id = topic.id;
                 let publication_id = random_id();
+                let mut event_message = Message::Event(1, publication_id, EventDetails::new(), args.clone(), kwargs.clone());
+                let my_id = self.info.borrow().id;
+                for (subscriber, topic_id, policy) in manager.subscriptions.filter(topic.clone()) {
+                    if subscriber.borrow().id != my_id {
+                        if let Message::Event(ref mut old_topic, ref _publish_id, ref mut details, ref _args, ref _kwargs) = event_message {
+                            *old_topic = topic_id;
+                            details.topic = if policy == MatchingPolicy::Strict {
+                                None
+                            } else {
+                                Some(topic.clone())
+                            };
+                        }
+                        try!(send_message(subscriber, &event_message));
+                    }
+                }
                 if options.should_acknolwedge() {
                     try!(send_message(&self.info, &Message::Published(request_id, publication_id)));
-                }
-                let event_message = Message::Event(topic_id, publication_id, EventDetails::new(), args, kwargs);
-                for subscriber in topic.subscribers.iter() {
-                    try!(send_message(subscriber, &event_message))
                 }
                 Ok(())
             },
@@ -320,12 +320,9 @@ impl ConnectionHandler{
                     let mut manager = realm.subscription_manager.lock().unwrap();
                     for subscription_id in self.info.borrow().subscribed_topics.iter() {
                         // TODO Error check
-                        let topic_uri = manager.subscription_ids_to_uris.remove(&subscription_id).unwrap();
-                        // TODO what happens then?
-                        let mut topic = manager.subscriptions.get_mut(&topic_uri).unwrap();
-                        topic.subscribers.retain(|subscription| {
-                            subscription.borrow().id != self.info.borrow().id
-                        });
+                        let (topic_uri, is_prefix) = manager.subscription_ids_to_uris.remove(&subscription_id).unwrap();
+                        // TODO More error checking
+                        manager.subscriptions.unsubscribe_with(&topic_uri, &self.info, is_prefix).unwrap();
                     }
                 }
                 realm.borrow_mut().connections.retain(|connection| {
