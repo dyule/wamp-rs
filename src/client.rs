@@ -4,7 +4,7 @@ use websocket::client;
 use websocket::stream;
 use websocket::message::{Message as WSMessage, Type};
 use websocket::header;
-use messages::{URI, Dict, List, SubscribeOptions, PublishOptions, Message,  HelloDetails, Reason, ErrorDetails, ClientRoles};
+use messages::{URI, Dict, List, SubscribeOptions, PublishOptions, Message,  HelloDetails, Reason, ErrorDetails, ClientRoles, MatchingPolicy};
 use std::collections::HashMap;
 use serde_json;
 use serde::{Deserialize, Serialize};
@@ -410,19 +410,27 @@ impl Client {
         self.max_session_id
     }
 
-    pub fn subscribe(&mut self, topic: URI, callback: Box<Fn(List, Dict)>) -> WampResult<Future<Subscription, Error>> {
+    pub fn subscribe_with_pattern(&mut self, topic_pattern: URI, callback: Box<Fn(List, Dict)>, policy: MatchingPolicy) -> WampResult<Future<Subscription, Error>> {
         // Send a subscribe messages
         let request_id = self.get_next_session_id();
         let (complete, future) = Future::<(ID, Arc<ConnectionInfo>), Error>::pair();
-        let the_topic = topic.clone();
+        let the_topic = topic_pattern.clone();
         let callback = CallbackWrapper {callback: callback};
         let future = future.and_then(move |(subscription_id, info): (ID, Arc<ConnectionInfo>)| {
             info.subscriptions.lock().unwrap().insert(subscription_id, callback);
              Ok(Subscription{topic: the_topic, subscription_id: subscription_id})
         });
+        let mut options = SubscribeOptions::new();
+        if policy != MatchingPolicy::Strict {
+            options.pattern_match = policy
+        }
         self.connection_info.subscription_requests.lock().unwrap().insert(request_id, complete);
-        try!(self.send_message(Message::Subscribe(request_id, SubscribeOptions::new(), topic)));
+        try!(self.send_message(Message::Subscribe(request_id, options, topic_pattern)));
         Ok(future)
+    }
+
+    pub fn subscribe(&mut self, topic: URI, callback: Box<Fn(List, Dict)>) -> WampResult<Future<Subscription, Error>> {
+        self.subscribe_with_pattern(topic, callback, MatchingPolicy::Strict)
     }
 
     pub fn unsubscribe(&mut self, subscription: Subscription) -> WampResult<Future<(), Error>> {

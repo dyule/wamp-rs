@@ -19,7 +19,7 @@ use router::patterns::PatternNode;
 
 struct SubscriptionManager {
     subscriptions : PatternNode<Arc<RefCell<ConnectionInfo>>>,
-    subscription_ids_to_uris: HashMap<u64, (String, bool)>, // Should only be accessed when the subscriptions mutex is open
+    subscription_ids_to_uris: HashMap<u64, (String, bool)>
 }
 
 struct Realm {
@@ -233,6 +233,7 @@ impl ConnectionHandler{
                 let publication_id = random_id();
                 let mut event_message = Message::Event(1, publication_id, EventDetails::new(), args.clone(), kwargs.clone());
                 let my_id = self.info.borrow().id;
+                info!("Current topic tree: {:?}", manager.subscriptions);
                 for (subscriber, topic_id, policy) in manager.subscriptions.filter(topic.clone()) {
                     if subscriber.borrow().id != my_id {
                         if let Message::Event(ref mut old_topic, ref _publish_id, ref mut details, ref _args, ref _kwargs) = event_message {

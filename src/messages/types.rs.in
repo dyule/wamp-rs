@@ -162,8 +162,8 @@ pub struct PublisherRole {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct SubscriberRole {
-    #[serde(skip_serializing, default)]
-    feature: Option<String>
+    #[serde(skip_serializing_if="is_not", default)]
+    pattern_based_subscription: bool
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -174,8 +174,8 @@ pub struct DealerRole {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct BrokerRole {
-    #[serde(skip_serializing, default)]
-    feature: Option<String>
+    #[serde(skip_serializing_if="is_not", default)]
+    pattern_based_subscription: bool
 }
 
 /**************************
@@ -227,19 +227,37 @@ impl WelcomeDetails {
 }
 
 impl RouterRoles {
+    #[inline]
     pub fn new() -> RouterRoles {
         RouterRoles {
-            broker: BrokerRole{feature: None},
+            broker: BrokerRole{pattern_based_subscription: true},
+            dealer: DealerRole{feature: None}
+        }
+    }
+
+    #[inline]
+    pub fn new_basic() -> RouterRoles {
+        RouterRoles {
+            broker: BrokerRole{pattern_based_subscription: false},
             dealer: DealerRole{feature: None}
         }
     }
 }
 
 impl ClientRoles {
+    #[inline]
     pub fn new() -> ClientRoles {
         ClientRoles {
             publisher: PublisherRole{feature: None},
-            subscriber: SubscriberRole{feature: None}
+            subscriber: SubscriberRole{pattern_based_subscription: true}
+        }
+    }
+
+    #[inline]
+    pub fn new_basic() -> ClientRoles {
+        ClientRoles {
+            publisher: PublisherRole{feature: None},
+            subscriber: SubscriberRole{pattern_based_subscription: false}
         }
     }
 }

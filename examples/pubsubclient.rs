@@ -2,7 +2,7 @@ extern crate wamp;
 extern crate eventual;
 extern crate serde;
 use wamp::client::{Connection, Client, Subscription};
-use wamp::{URI, Value};
+use wamp::{URI, Value, MatchingPolicy};
 use std::io;
 use std::sync::{Mutex, Arc};
 use eventual::Async;
@@ -57,17 +57,30 @@ fn process_input(input: String) -> (Command, Vec<String>) {
 }
 
 fn subscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscription>>>, args: Vec<String>) {
-    if args.len() > 1 {
+    if args.len() > 2 {
         println!("Too many arguments to subscribe.  Ignoring");
     } else if args.len() == 0 {
         println!("Please specify the topic to subscribe to");
         return;
     }
     let topic = args[0].clone();
+    let policy = if args.len() > 1 {
+        match  args[1].as_str() {
+            "prefix" => MatchingPolicy::Prefix,
+            "wild" => MatchingPolicy::Wildcard,
+            "strict" => MatchingPolicy::Strict,
+            _ => {
+                println!("Invalid matching type, should be 'prefix', 'wild' or 'strict'");
+                return;
+            }
+        }
+    } else {
+        MatchingPolicy::Strict
+    };
     let subscriptions = subscriptions.clone();
-    client.subscribe(URI::new(&topic), Box::new(move |args, kwargs|{
+    client.subscribe_with_pattern(URI::new(&topic), Box::new(move |args, kwargs|{
         println!("Recieved message on topic {} with args {:?} and kwargs {:?}", topic, args, kwargs);
-    })).unwrap().and_then(move |subscription|{
+    }), policy).unwrap().and_then(move |subscription|{
         println!("Subscribed to topic {}", subscription.topic.uri);
         subscriptions.lock().unwrap().push(subscription);
         Ok(())
@@ -125,8 +138,10 @@ fn publish(client: &mut Client, args: Vec<String>) {
 
 fn help() {
     println!("The following commands are supported:");
-    println!("  sub <topic>", );
+    println!("  sub <topic>, <matching policy>?", );
     println!("       Subscribes to the topic specified by the uri <topic>");
+    println!("       <matching policy> specifies the type of patten matching used", );
+    println!("       <matching policy> should be one of 'strict' (the default), 'wild' or 'prefix'", );
     println!("  pub <topic>, <args>*", );
     println!("       Publishes to the topic specified by uri <topic>");
     println!("       <args> is an optinal, comma separated list of arguments");

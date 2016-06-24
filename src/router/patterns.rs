@@ -348,7 +348,7 @@ impl <'a, P: PatternData> MatchIterator<'a, P> {
             IterState::Subs(ref mut sub_iter) => {
                 let next = sub_iter.next();
                 if let Some(next) = next {
-                    return Some((&next.subscriber, self.current.node.prefix_id.clone(), next.policy))
+                    return Some((&next.subscriber, self.current.node.id.clone(), next.policy))
                 }
             },
             _ => {}
@@ -392,13 +392,15 @@ impl <'a, P: PatternData> MatchIterator<'a, P> {
           let connection4 = MockData::new(4);
           let mut root = PatternNode::new();
 
-          root.subscribe_with(&URI::new("com.example.test..topic"), connection1, MatchingPolicy::Wildcard).unwrap();
-          root.subscribe_with(&URI::new("com.example.test.specific.topic"), connection2, MatchingPolicy::Strict).unwrap();
-          root.subscribe_with(&URI::new("com.example"), connection3, MatchingPolicy::Prefix).unwrap();
-          root.subscribe_with(&URI::new("com.example.test"), connection4, MatchingPolicy::Prefix).unwrap();
+          let ids = [
+            root.subscribe_with(&URI::new("com.example.test..topic"), connection1, MatchingPolicy::Wildcard).unwrap(),
+            root.subscribe_with(&URI::new("com.example.test.specific.topic"), connection2, MatchingPolicy::Strict).unwrap(),
+            root.subscribe_with(&URI::new("com.example"), connection3, MatchingPolicy::Prefix).unwrap(),
+            root.subscribe_with(&URI::new("com.example.test"), connection4, MatchingPolicy::Prefix).unwrap(),
+         ];
 
-          assert_eq!(root.filter(URI::new("com.example.test.specific.topic")).map(|(connection, _id, _policy)| connection.get_id()).collect::<Vec<_>>(), vec![
-            3, 4, 1, 2
+          assert_eq!(root.filter(URI::new("com.example.test.specific.topic")).map(|(_connection, id, _policy)| id).collect::<Vec<_>>(), vec![
+            ids[2], ids[3], ids[0], ids[1]
           ]);
 
      }
@@ -411,16 +413,18 @@ impl <'a, P: PatternData> MatchIterator<'a, P> {
         let connection4 = MockData::new(4);
         let mut root = PatternNode::new();
 
-        root.subscribe_with(&URI::new("com.example.test..topic"), connection1.clone(), MatchingPolicy::Wildcard).unwrap();
-        root.subscribe_with(&URI::new("com.example.test.specific.topic"), connection2, MatchingPolicy::Strict).unwrap();
-        root.subscribe_with(&URI::new("com.example"), connection3, MatchingPolicy::Prefix).unwrap();
-        root.subscribe_with(&URI::new("com.example.test"), connection4.clone(), MatchingPolicy::Prefix).unwrap();
+        let ids = [
+          root.subscribe_with(&URI::new("com.example.test..topic"), connection1.clone(), MatchingPolicy::Wildcard).unwrap(),
+          root.subscribe_with(&URI::new("com.example.test.specific.topic"), connection2, MatchingPolicy::Strict).unwrap(),
+          root.subscribe_with(&URI::new("com.example"), connection3, MatchingPolicy::Prefix).unwrap(),
+          root.subscribe_with(&URI::new("com.example.test"), connection4.clone(), MatchingPolicy::Prefix).unwrap(),
+       ];
 
         root.unsubscribe_with("com.example.test..topic", &connection1, false).unwrap();
         root.unsubscribe_with("com.example.test", &connection4, true).unwrap();
 
-        assert_eq!(root.filter(URI::new("com.example.test.specific.topic")).map(|(connection, _id, _policy)| connection.get_id()).collect::<Vec<_>>(), vec![
-          3, 2
-        ]);
+        assert_eq!(root.filter(URI::new("com.example.test.specific.topic")).map(|(_connection, id, _policy)| id).collect::<Vec<_>>(), vec![
+          ids[2], ids[1]
+        ])
      }
  }

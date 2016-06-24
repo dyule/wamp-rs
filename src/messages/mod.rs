@@ -245,24 +245,24 @@ mod test {
     #[test]
     fn serialize_hello() {
         two_way_test!(
-            Message::Hello(URI::new("ca.dal.wamp.test"), HelloDetails::new(ClientRoles::new())),
+            Message::Hello(URI::new("ca.dal.wamp.test"), HelloDetails::new(ClientRoles::new_basic())),
             "[1,\"ca.dal.wamp.test\",{\"roles\":{\"publisher\":{},\"subscriber\":{}}}]"
         );
         two_way_test!(
             Message::Hello(URI::new("ca.dal.wamp.test"), HelloDetails::new_with_agent(ClientRoles::new(), "dal_wamp")),
-            "[1,\"ca.dal.wamp.test\",{\"agent\":\"dal_wamp\",\"roles\":{\"publisher\":{},\"subscriber\":{}}}]"
+            "[1,\"ca.dal.wamp.test\",{\"agent\":\"dal_wamp\",\"roles\":{\"publisher\":{},\"subscriber\":{\"pattern_based_subscription\":true}}}]"
         )
     }
 
     #[test]
     fn serialize_welcome() {
         two_way_test!(
-            Message::Welcome(493782, WelcomeDetails::new(RouterRoles::new())),
+            Message::Welcome(493782, WelcomeDetails::new(RouterRoles::new_basic())),
             "[2,493782,{\"roles\":{\"dealer\":{},\"broker\":{}}}]"
         );
         two_way_test!(
             Message::Welcome(493782, WelcomeDetails::new_with_agent(RouterRoles::new(), "dal_wamp")),
-            "[2,493782,{\"agent\":\"dal_wamp\",\"roles\":{\"dealer\":{},\"broker\":{}}}]"
+            "[2,493782,{\"agent\":\"dal_wamp\",\"roles\":{\"dealer\":{},\"broker\":{\"pattern_based_subscription\":true}}}]"
         );
     }
 
