@@ -1,10 +1,9 @@
 //! Contains the `PatternNode` struct, which is used for constructing a trie corresponding
 //! to pattern based subscription
 use super::{ConnectionInfo, random_id};
-use ::{ID, URI, WampResult, Error, ErrorKind, MatchingPolicy};
+use ::{ID, URI, MatchingPolicy};
 use messages::Reason;
-use std::sync::{Arc};
-use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::slice::Iter;
 use std::mem;
@@ -96,6 +95,12 @@ struct StackFrame<'a, P> where
     parent: Option<Box<StackFrame<'a, P>>>
 }
 
+/// Represents an error caused during adding or removing patterns
+#[derive(Debug)]
+pub struct PatternError {
+    reason: Reason
+}
+
 #[derive(Clone)]
 enum IterState<'a, P: PatternData> where
         P : PatternData,
@@ -109,9 +114,22 @@ enum IterState<'a, P: PatternData> where
     AllComplete
 }
 
-impl PatternData for Arc<RefCell<ConnectionInfo>> {
+impl PatternError {
+    #[inline]
+    pub fn new(reason: Reason) -> PatternError {
+        PatternError {
+            reason: reason
+        }
+    }
+
+    pub fn reason(self) -> Reason {
+        self.reason
+    }
+}
+
+impl PatternData for Arc<Mutex<ConnectionInfo>> {
     fn get_id(&self) -> ID {
-        self.borrow().id
+        self.lock().unwrap().id
     }
 }
 
@@ -153,18 +171,18 @@ impl<P:PatternData> PatternNode<P> {
     }
 
     /// Add a new subscription to the pattern trie with the given pattern and matching policy.
-    pub fn subscribe_with(&mut self, topic: &URI, subscriber: P, matching_policy: MatchingPolicy) -> WampResult<ID> {
+    pub fn subscribe_with(&mut self, topic: &URI, subscriber: P, matching_policy: MatchingPolicy) -> Result<ID, PatternError> {
         let mut uri_bits = topic.uri.split(".");
         let initial = match uri_bits.next() {
             Some(initial) => initial,
-            None          => return Err(Error::new(ErrorKind::ErrorReason(Reason::InvalidURI)))
+            None          => return Err(PatternError::new(Reason::InvalidURI))
         };
         let edge = self.edges.entry(initial.to_string()).or_insert(PatternNode::new());
         edge.add_subscription(uri_bits, subscriber, matching_policy)
     }
 
     /// Removes a subscription from the pattern trie.
-    pub fn unsubscribe_with(&mut self, topic: &str, subscriber: &P, is_prefix: bool) -> WampResult<(ID)> {
+    pub fn unsubscribe_with(&mut self, topic: &str, subscriber: &P, is_prefix: bool) -> Result<ID, PatternError> {
         let uri_bits = topic.split(".");
         self.remove_subscription(uri_bits, subscriber.get_id(), is_prefix)
     }
@@ -181,12 +199,12 @@ impl<P:PatternData> PatternNode<P> {
         }
     }
 
-    fn add_subscription<'a, I>(&mut self, mut uri_bits: I, subscriber: P, matching_policy: MatchingPolicy) -> WampResult<ID> where I: Iterator<Item=&'a str> {
+    fn add_subscription<'a, I>(&mut self, mut uri_bits: I, subscriber: P, matching_policy: MatchingPolicy) -> Result<ID, PatternError> where I: Iterator<Item=&'a str> {
         match uri_bits.next() {
             Some(uri_bit) => {
                 if uri_bit.len() == 0 {
                     if matching_policy != MatchingPolicy::Wildcard {
-                        return Err(Error::new(ErrorKind::ErrorReason(Reason::InvalidURI)));
+                        return Err(PatternError::new(Reason::InvalidURI));
                     }
                 }
                 let edge = self.edges.entry(uri_bit.to_string()).or_insert(PatternNode::new());
@@ -210,14 +228,14 @@ impl<P:PatternData> PatternNode<P> {
         }
     }
 
-    fn remove_subscription<'a, I>(&mut self, mut uri_bits: I, subscriber_id: u64, is_prefix: bool) -> WampResult<(ID)> where I: Iterator<Item=&'a str> {
+    fn remove_subscription<'a, I>(&mut self, mut uri_bits: I, subscriber_id: u64, is_prefix: bool) -> Result<ID, PatternError> where I: Iterator<Item=&'a str> {
         // TODO consider deleting nodes in the tree if they are no longer in use.
         match uri_bits.next() {
             Some(uri_bit) => {
                 if let Some(mut edge) = self.edges.get_mut(uri_bit) {
                     edge.remove_subscription(uri_bits, subscriber_id, is_prefix)
                 } else {
-                    return Err(Error::new(ErrorKind::ErrorReason(Reason::InvalidURI)))
+                    return Err(PatternError::new(Reason::InvalidURI))
                 }
             },
             None => {

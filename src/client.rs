@@ -470,7 +470,7 @@ impl Client {
             try!(self.send_message(Message::Goodbye(ErrorDetails::new(), Reason::SystemShutdown)));
             Ok(future)
         } else {
-            Err(Error::new(ErrorKind::InvalidState("Tried to shut down a client that was already shutting down".to_string())))
+            Err(Error::new(ErrorKind::InvalidState("Tried to shut down a client that was already shutting down")))
         }
     }
 }
