@@ -1,6 +1,5 @@
 extern crate wamp;
 extern crate eventual;
-extern crate serde;
 use wamp::client::{Connection, Client, Subscription};
 use wamp::{URI, Value, MatchingPolicy};
 use std::io;

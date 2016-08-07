@@ -30,7 +30,7 @@ use rmp_serde::decode::Error as MsgPackError;
 pub use messages::{URI, Dict, List, Value, Reason, MatchingPolicy};
 use messages::{ErrorType, Message};
 
-
+pub type CallResult<T> = Result<T, Reason>;
 pub type WampResult<T> = Result<T, Error>;
 pub type ID = u64;
 

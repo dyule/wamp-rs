@@ -4,14 +4,14 @@ use websocket::client;
 use websocket::stream;
 use websocket::message::{Message as WSMessage, Type};
 use websocket::header;
-use messages::{URI, Dict, List, SubscribeOptions, PublishOptions, Message,  HelloDetails, Reason, ErrorDetails, ClientRoles, MatchingPolicy};
+use messages::{URI, Dict, List, SubscribeOptions, PublishOptions, RegisterOptions, Message,  HelloDetails, Reason, ErrorDetails, ClientRoles, MatchingPolicy};
 use std::collections::HashMap;
 use serde_json;
 use serde::{Deserialize, Serialize};
 use std::str::from_utf8;
 use std::fmt;
 use std::time::Duration;
-use ::{WampResult, Error, ErrorKind, ID};
+use ::{WampResult, CallResult, Error, ErrorKind, ID};
 use std::thread::{self, JoinHandle};
 use std::sync::{Mutex, Arc};
 use rmp_serde::Deserializer as RMPDeserializer;
@@ -41,8 +41,17 @@ pub struct Subscription {
     subscription_id: ID
 }
 
-struct CallbackWrapper {
+pub struct Registration {
+    pub procedure: URI,
+    registration_id: ID
+}
+
+struct SubscriptionCallbackWrapper {
     callback: Box<Fn(List, Dict)>
+}
+
+struct RegistrationCallbackWrapper {
+    callback: Box<Fn(List, Dict) -> CallResult<(List, Dict)> >
 }
 
 static WAMP_JSON:&'static str = "wamp.2.json";
@@ -59,9 +68,13 @@ unsafe impl <'a> Send for ConnectionInfo {}
 
 unsafe impl<'a> Sync for ConnectionInfo {}
 
-unsafe impl <'a> Send for CallbackWrapper {}
+unsafe impl <'a> Send for SubscriptionCallbackWrapper {}
 
-unsafe impl<'a> Sync for CallbackWrapper {}
+unsafe impl<'a> Sync for SubscriptionCallbackWrapper {}
+
+unsafe impl <'a> Send for RegistrationCallbackWrapper {}
+
+unsafe impl<'a> Sync for RegistrationCallbackWrapper {}
 
 pub struct Client {
     connection_info: Arc<ConnectionInfo>,
@@ -74,7 +87,11 @@ struct ConnectionInfo {
     sender: Mutex<client::Sender<stream::WebSocketStream>>,
     subscription_requests: Mutex<HashMap<ID, Complete<(ID, Arc<ConnectionInfo>), Error>>>,
     unsubscription_requests: Mutex<HashMap<ID, Complete<Arc<ConnectionInfo>, Error>>>,
-    subscriptions: Mutex<HashMap<ID, CallbackWrapper>>,
+    subscriptions: Mutex<HashMap<ID, SubscriptionCallbackWrapper>>,
+    registrations: Mutex<HashMap<ID, RegistrationCallbackWrapper>>,
+    call_requests: Mutex<HashMap<ID, Complete<(Option<List>, Option<Dict>), Error>>>,
+    registration_requests: Mutex<HashMap<ID, Complete<(ID, Arc<ConnectionInfo>), Error>>>,
+    unregistration_requests: Mutex<HashMap<ID, Complete<Arc<ConnectionInfo>, Error>>>,
     protocol: String,
     published_callbacks: Mutex<HashMap<ID, Complete<ID, Error>>>,
     shutdown_complete: Mutex<Option<Complete<(), Error>>>
@@ -131,6 +148,7 @@ fn handle_welcome_message(receiver: &mut client::Receiver<stream::WebSocketStrea
                 debug!("Recieved welcome message in text form: {:?}", message.payload);
                 match from_utf8(&message.payload) {
                     Ok(message_text) => {
+                        debug!("Welcome message text: {}", message_text);
                         match serde_json::from_str(message_text) {
                             Ok(message) => {
                                 return Ok(message);
@@ -208,6 +226,10 @@ impl Connection {
             subscription_requests: Mutex::new(HashMap::new()),
             unsubscription_requests: Mutex::new(HashMap::new()),
             subscriptions: Mutex::new(HashMap::new()),
+            registrations: Mutex::new(HashMap::new()),
+            call_requests: Mutex::new(HashMap::new()),
+            registration_requests: Mutex::new(HashMap::new()),
+            unregistration_requests: Mutex::new(HashMap::new()),
             sender: Mutex::new(sender),
             connection_state: Mutex::new(ConnectionState::Connected),
             published_callbacks: Mutex::new(HashMap::new()),
@@ -364,7 +386,31 @@ impl Connection {
                     }
                 }
 
-            }
+            },
+            Message::Registered(request_id, registration_id) => {
+                // TODO handle errors here
+                info!("Recieved a registered notification");
+                match connection_info.registration_requests.lock().unwrap().remove(&request_id) {
+                    Some(promise) => {
+                        debug!("Completing promise");
+                        promise.complete((registration_id, connection_info.clone()))
+                    },
+                    None => {
+                        warn!("Recieved a registered notification for a registration we don't have.  ID: {}", request_id);
+                    }
+                }
+
+            },
+            Message::Unregistered(request_id) => {
+                match connection_info.unregistration_requests.lock().unwrap().remove(&request_id) {
+                    Some(promise) => {
+                        promise.complete(connection_info.clone())
+                    },
+                    None => {
+                        warn!("Recieved a unregistered notification for a registration we don't have.  ID: {}", request_id);
+                    }
+                }
+            },
             Message::Goodbye(_, reason) => {
                 match *connection_info.connection_state.lock().unwrap() {
                     ConnectionState::Connected => {
@@ -415,7 +461,7 @@ impl Client {
         let request_id = self.get_next_session_id();
         let (complete, future) = Future::<(ID, Arc<ConnectionInfo>), Error>::pair();
         let the_topic = topic_pattern.clone();
-        let callback = CallbackWrapper {callback: callback};
+        let callback = SubscriptionCallbackWrapper {callback: callback};
         let future = future.and_then(move |(subscription_id, info): (ID, Arc<ConnectionInfo>)| {
             info.subscriptions.lock().unwrap().insert(subscription_id, callback);
              Ok(Subscription{topic: the_topic, subscription_id: subscription_id})
@@ -433,6 +479,29 @@ impl Client {
         self.subscribe_with_pattern(topic, callback, MatchingPolicy::Strict)
     }
 
+    pub fn register_with_pattern(&mut self, procedure_pattern: URI, callback: Box<Fn(List, Dict) -> CallResult<(List, Dict)> >, policy: MatchingPolicy) -> WampResult<Future<Registration, Error>> {
+        // Send a register messages
+        let request_id = self.get_next_session_id();
+        let (complete, future) = Future::<(ID, Arc<ConnectionInfo>), Error>::pair();
+        let the_procedure = procedure_pattern.clone();
+        let callback = RegistrationCallbackWrapper {callback: callback};
+        let future = future.and_then(move |(registration_id, info): (ID, Arc<ConnectionInfo>)| {
+            info.registrations.lock().unwrap().insert(registration_id, callback);
+             Ok(Registration{procedure: the_procedure, registration_id: registration_id})
+        });
+        let mut options = RegisterOptions::new();
+        if policy != MatchingPolicy::Strict {
+            options.pattern_match = policy
+        }
+        self.connection_info.registration_requests.lock().unwrap().insert(request_id, complete);
+        try!(self.send_message(Message::Register(request_id, options, procedure_pattern)));
+        Ok(future)
+    }
+
+    pub fn register(&mut self, procedure: URI, callback: Box<Fn(List, Dict) -> CallResult<(List, Dict)> >) -> WampResult<Future<Registration, Error>> {
+        self.register_with_pattern(procedure, callback, MatchingPolicy::Strict)
+    }
+
     pub fn unsubscribe(&mut self, subscription: Subscription) -> WampResult<Future<(), Error>> {
         let request_id = self.get_next_session_id();
         try!(self.send_message(Message::Unsubscribe(request_id, subscription.subscription_id)));
@@ -443,6 +512,18 @@ impl Client {
             Ok(())
         }))
     }
+
+    pub fn unregister(&mut self, registration: Registration) -> WampResult<Future<(), Error>> {
+        let request_id = self.get_next_session_id();
+        try!(self.send_message(Message::Unregister(request_id, registration.registration_id)));
+        let (complete, future) = Future::<Arc<ConnectionInfo>, Error>::pair();
+        self.connection_info.unregistration_requests.lock().unwrap().insert(request_id, complete);
+        Ok(future.and_then(move |info| {
+            info.registrations.lock().unwrap().remove(&registration.registration_id);
+            Ok(())
+        }))
+    }
+
 
 
     pub fn publish(&mut self, topic: URI, args: Option<List>, kwargs: Option<Dict>) -> WampResult<()> {

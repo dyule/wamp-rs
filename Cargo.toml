@@ -9,23 +9,23 @@ name = "wamp"
 path = "src/lib.rs"
 
 [features]
-default = ["serde_codegen"]
-nightly = ["serde_macros"]
+stable = ["serde_codegen"]
+default = ["serde_macros"]
 
 [build-dependencies]
-serde_codegen = { version = "*", optional = true }
-syntex = "*"
+serde_codegen = { version = "0.7", optional = true }
+syntex = "0.39"
 
 [dependencies]
-serde = "*"
-serde_json = "*"
-serde_macros = { version = "*", optional = true }
-websocket = "0.15.1"
+serde = "0.7"
+serde_json = {version="0.7"}
+serde_macros = { version = "0.7", optional = true }
+websocket = "0.17.1"
 url = "*"
 log = "0.3"
 env_logger = "0.3"
-rmp = {version = "0.7"}
-rmp-serde = {version = "0.9"}
+rmp = {version = "0.7", path="../msgpack-rust/rmp"}
+rmp-serde = {version = "0.9", path="../msgpack-rust/rmp-serde"}
 ws = "0.4"
 rand = "0.3"
 eventual = "0.1.7"

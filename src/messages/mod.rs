@@ -1,5 +1,4 @@
 use serde;
-use serde::de::Deserialize;
 pub use messages::types::*;
 use ::ID;
 mod types;
@@ -27,6 +26,14 @@ pub enum Message {
     Publish(ID, PublishOptions, URI, Option<List>, Option<Dict>),
     Published(ID, ID),
     Event(ID, ID, EventDetails, Option<List>, Option<Dict>),
+    Register(ID, RegisterOptions, URI),
+    Registered(ID, ID),
+    Unregister(ID, ID),
+    Unregistered(ID),
+    Call(ID, CallOptions, URI, Option<List>, Option<Dict>),
+    Invocation(ID, InvocationDetails, ID, Option<List>, Option<Dict>),
+    Yield(ID, YieldOptions, Option<List>, Option<Dict>),
+    Result(ID, ResultDetails, Option<List>, Option<Dict>),
 }
 
 macro_rules! serialize_with_args {
@@ -86,10 +93,33 @@ impl serde::Serialize for Message {
             Message::Published(request_id, publication_id) => {
                 (17, request_id, publication_id).serialize(serializer)
             },
-            Message::Event(subscription_id, publication_id, ref details, ref args, ref kwargs) =>
-            {
+            Message::Event(subscription_id, publication_id, ref details, ref args, ref kwargs) => {
                 serialize_with_args!(args, kwargs, serializer, 36, subscription_id, publication_id, details)
             },
+            Message::Register(request_id, ref options, ref procedure) => {
+                (64, request_id, options, procedure).serialize(serializer)
+            },
+            Message::Registered(request_id, registration_id) => {
+                (65, request_id, registration_id).serialize(serializer)
+            },
+            Message::Unregister(request_id, registration_id) => {
+                (66, request_id, registration_id).serialize(serializer)
+            },
+            Message::Unregistered(request_id) => {
+                (67, request_id).serialize(serializer)
+            },
+            Message::Call(id, ref options, ref topic, ref args, ref kwargs) => {
+                serialize_with_args!(args, kwargs, serializer, 48, id, options, topic)
+            },
+            Message::Invocation(id, ref details, registration_id, ref args, ref kwargs) => {
+                serialize_with_args!(args, kwargs, serializer, 68, id, details, registration_id)
+            },
+            Message::Yield(id, ref options, ref args, ref kwargs) => {
+                serialize_with_args!(args, kwargs, serializer, 70, id, options)
+            },
+            Message::Result(id, ref details, ref args, ref kwargs) => {
+                serialize_with_args!(args, kwargs, serializer, 50, id, details)
+            }
         }
     }
 }
@@ -200,6 +230,72 @@ impl MessageVisitor {
         try!(visitor.end());
         Ok(Message::Event(subscription_id, publication_id, details, args, kwargs))
     }
+
+    fn visit_register<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
+        let request = try_or!(visitor.visit(), "Register message ended before request id");
+        let options = try_or!(visitor.visit(), "Register message ended before request options");
+        let procedure = try_or!(visitor.visit(), "Register message ended before procedure");
+        try!(visitor.end());
+        Ok(Message::Register(request, options, procedure))
+    }
+
+    fn visit_registered<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
+        let request = try_or!(visitor.visit(), "Registered message ended before request id");
+        let registration_id = try_or!(visitor.visit(), "Registered message ended before registration id");
+        try!(visitor.end());
+        Ok(Message::Registered(request, registration_id))
+    }
+
+    fn visit_unregister<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
+        let request = try_or!(visitor.visit(), "Registered message ended before request id");
+        let registration_id = try_or!(visitor.visit(), "Registered message ended before registration id");
+        try!(visitor.end());
+        Ok(Message::Unregister(request, registration_id))
+    }
+
+    fn visit_unregistered<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
+        let request = try_or!(visitor.visit(), "Registered message ended before request id");
+        try!(visitor.end());
+        Ok(Message::Unregistered(request))
+    }
+
+    fn visit_call<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
+        let id = try_or!(visitor.visit(), "Call message ended before session id");
+        let options = try_or!(visitor.visit(), "Call message ended before options dict");
+        let topic = try_or!(visitor.visit(), "Call message ended before procedure uri");
+        let args = try!(visitor.visit());
+        let kwargs = try!(visitor.visit());
+        try!(visitor.end());
+        Ok(Message::Call(id, options, topic, args, kwargs))
+    }
+
+    fn visit_invocation<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
+        let id = try_or!(visitor.visit(), "Invocation message ended before session id");
+        let details = try_or!(visitor.visit(), "Invocation message ended before details dict");
+        let registration_id = try_or!(visitor.visit(), "Invocation message ended before registration id");
+        let args = try!(visitor.visit());
+        let kwargs = try!(visitor.visit());
+        try!(visitor.end());
+        Ok(Message::Invocation(id, details, registration_id, args, kwargs))
+    }
+
+    fn visit_yield<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
+        let id = try_or!(visitor.visit(), "Yield message ended before session id");
+        let options = try_or!(visitor.visit(), "Yield message ended before options dict");
+        let args = try!(visitor.visit());
+        let kwargs = try!(visitor.visit());
+        try!(visitor.end());
+        Ok(Message::Yield(id, options, args, kwargs))
+    }
+
+    fn visit_result<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
+        let id = try_or!(visitor.visit(), "Result message ended before session id");
+        let details = try_or!(visitor.visit(), "Result message ended before details dict");
+        let args = try!(visitor.visit());
+        let kwargs = try!(visitor.visit());
+        try!(visitor.end());
+        Ok(Message::Result(id, details, args, kwargs))
+    }
 }
 
 impl serde::de::Visitor for MessageVisitor {
@@ -220,6 +316,14 @@ impl serde::de::Visitor for MessageVisitor {
             16 => self.visit_publish(visitor),
             17 => self.visit_published(visitor),
             36 => self.visit_event(visitor),
+            64 => self.visit_register(visitor),
+            65 => self.visit_registered(visitor),
+            66 => self.visit_unregister(visitor),
+            67 => self.visit_unregistered(visitor),
+            48 => self.visit_call(visitor),
+            68 => self.visit_invocation(visitor),
+            70 => self.visit_yield(visitor),
+            50 => self.visit_result(visitor),
             _  => Err(serde::de::Error::custom("Unknown message type"))
         }
     }
@@ -228,7 +332,25 @@ impl serde::de::Visitor for MessageVisitor {
 #[cfg(test)]
 mod test {
     use super::{Message};
-    use super::types::{URI, ClientRoles, RouterRoles, HelloDetails, WelcomeDetails, ErrorDetails, Reason, ErrorType, SubscribeOptions, PublishOptions, Value, EventDetails};
+    use super::types::{
+        URI,
+        ClientRoles,
+        RouterRoles,
+        HelloDetails,
+        WelcomeDetails,
+        ErrorDetails,
+        Reason,
+        ErrorType,
+        SubscribeOptions,
+        PublishOptions,
+        RegisterOptions,
+        CallOptions,
+        YieldOptions,
+        Value,
+        EventDetails,
+        InvocationDetails,
+        ResultDetails
+    };
     use std::collections::{HashMap};
     use serde_json;
 
@@ -262,7 +384,7 @@ mod test {
         );
         two_way_test!(
             Message::Welcome(493782, WelcomeDetails::new_with_agent(RouterRoles::new(), "dal_wamp")),
-            "[2,493782,{\"agent\":\"dal_wamp\",\"roles\":{\"dealer\":{},\"broker\":{\"pattern_based_subscription\":true}}}]"
+            "[2,493782,{\"agent\":\"dal_wamp\",\"roles\":{\"dealer\":{\"features\":{\"pattern_based_registration\":true}},\"broker\":{\"features\":{\"pattern_based_subscription\":true}}}}]"
         );
     }
 
@@ -351,13 +473,13 @@ mod test {
 
         two_way_test!(
             Message::Publish(23934583, PublishOptions::new(true), URI::new("ca.dal.test.topic2"), Some(vec![Value::String("a value".to_string())]), None),
-            "[16,23934583,{\"acknolwedge\":true},\"ca.dal.test.topic2\",[\"a value\"]]"
+            "[16,23934583,{\"acknowledge\":true},\"ca.dal.test.topic2\",[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
         kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
         two_way_test!(
             Message::Publish(3243542, PublishOptions::new(true), URI::new("ca.dal.test.topic3"), Some(Vec::new()), Some(kwargs)),
-            "[16,3243542,{\"acknolwedge\":true},\"ca.dal.test.topic3\",[],{\"key1\":[5]}]"
+            "[16,3243542,{\"acknowledge\":true},\"ca.dal.test.topic3\",[],{\"key1\":[5]}]"
         )
     }
 
@@ -385,6 +507,114 @@ mod test {
         two_way_test!(
             Message::Event(65675, 587495, EventDetails::new(), Some(Vec::new()), Some(kwargs)),
             "[36,65675,587495,{},[],{\"key1\":[5]}]"
+        )
+    }
+
+    #[test]
+    fn serialize_register() {
+        two_way_test!(
+            Message::Register(25349185, RegisterOptions::new(), URI::new("ca.test.proc")),
+            "[64,25349185,{},\"ca.test.proc\"]"
+        );
+    }
+
+    #[test]
+    fn serialize_registered() {
+        two_way_test!(
+            Message::Registered(25349185, 2103333224),
+            "[65,25349185,2103333224]"
+        );
+    }
+
+    #[test]
+    fn serialize_unregister() {
+        two_way_test!(
+            Message::Unregister(788923562, 2103333224),
+            "[66,788923562,2103333224]"
+        );
+    }
+
+    #[test]
+    fn serialize_unregistered() {
+        two_way_test!(
+            Message::Unregistered(788923562),
+            "[67,788923562]"
+        );
+    }
+
+    #[test]
+    fn serialize_call() {
+        two_way_test!(
+            Message::Call(7814135, CallOptions::new(), URI::new("com.myapp.ping"), None, None),
+            "[48,7814135,{},\"com.myapp.ping\"]"
+        );
+
+        two_way_test!(
+            Message::Call(764346, CallOptions::new(), URI::new("com.myapp.echo"), Some(vec![Value::String("a value".to_string())]), None),
+            "[48,764346,{},\"com.myapp.echo\",[\"a value\"]]"
+        );
+        let mut kwargs = HashMap::new();
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
+        two_way_test!(
+            Message::Call(764346, CallOptions::new(), URI::new("com.myapp.compute"), Some(Vec::new()), Some(kwargs)),
+            "[48,764346,{},\"com.myapp.compute\",[],{\"key1\":[5]}]"
+        )
+    }
+
+    #[test]
+    fn serialize_invocation() {
+        two_way_test!(
+            Message::Invocation(7814135, InvocationDetails::new(), 9823526, None, None),
+            "[68,7814135,{},9823526]"
+        );
+
+        two_way_test!(
+            Message::Invocation(764346, InvocationDetails::new(), 9823526, Some(vec![Value::String("a value".to_string())]), None),
+            "[68,764346,{},9823526,[\"a value\"]]"
+        );
+        let mut kwargs = HashMap::new();
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
+        two_way_test!(
+            Message::Invocation(764346, InvocationDetails::new(), 9823526, Some(Vec::new()), Some(kwargs)),
+            "[68,764346,{},9823526,[],{\"key1\":[5]}]"
+        )
+    }
+
+    #[test]
+    fn serialize_yield() {
+        two_way_test!(
+            Message::Yield(6131533, YieldOptions::new(), None, None),
+            "[70,6131533,{}]"
+        );
+
+        two_way_test!(
+            Message::Yield(6131533, YieldOptions::new(), Some(vec![Value::String("a value".to_string())]), None),
+            "[70,6131533,{},[\"a value\"]]"
+        );
+        let mut kwargs = HashMap::new();
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
+        two_way_test!(
+            Message::Yield(6131533, YieldOptions::new(), Some(Vec::new()), Some(kwargs)),
+            "[70,6131533,{},[],{\"key1\":[5]}]"
+        )
+    }
+
+    #[test]
+    fn serialize_result() {
+        two_way_test!(
+            Message::Result(7814135, ResultDetails::new(), None, None),
+            "[50,7814135,{}]"
+        );
+
+        two_way_test!(
+            Message::Result(764346, ResultDetails::new(), Some(vec![Value::String("a value".to_string())]), None),
+            "[50,764346,{},[\"a value\"]]"
+        );
+        let mut kwargs = HashMap::new();
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
+        two_way_test!(
+            Message::Result(764346, ResultDetails::new(), Some(Vec::new()), Some(kwargs)),
+            "[50,764346,{},[],{\"key1\":[5]}]"
         )
     }
 
