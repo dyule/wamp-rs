@@ -1,4 +1,4 @@
-use super::{ClientRoles, RouterRoles, MatchingPolicy, EmptyVisitor, is_not, URI};
+use super::{ClientRoles, RouterRoles, MatchingPolicy, InvocationPolicy, EmptyVisitor, is_not, URI};
 use serde;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -36,7 +36,10 @@ pub struct PublishOptions {
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct RegisterOptions {
     #[serde(default, rename="match", skip_serializing_if="MatchingPolicy::is_strict")]
-    pub pattern_match: MatchingPolicy
+    pub pattern_match: MatchingPolicy,
+
+    #[serde(default, rename="invoke", skip_serializing_if="InvocationPolicy::is_single")]
+    pub invocation_policy: InvocationPolicy
 }
 
 #[derive(PartialEq, Debug)]
@@ -58,8 +61,11 @@ pub struct EventDetails {
 
 }
 
-#[derive(PartialEq, Debug)]
-pub struct InvocationDetails;
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct InvocationDetails {
+    #[serde(default, skip_serializing_if="Option::is_none")]
+    pub procedure: Option<URI>,
+}
 
 #[derive(PartialEq, Debug)]
 pub struct ResultDetails;
@@ -137,7 +143,8 @@ impl PublishOptions {
 impl RegisterOptions {
     pub fn new() -> RegisterOptions {
         RegisterOptions {
-            pattern_match: MatchingPolicy::Strict
+            pattern_match: MatchingPolicy::Strict,
+            invocation_policy: InvocationPolicy::Single
         }
     }
 }
@@ -174,7 +181,9 @@ impl EventDetails {
 
 impl InvocationDetails {
     pub fn new() -> InvocationDetails {
-        InvocationDetails{}
+        InvocationDetails{
+            procedure: None
+        }
     }
 }
 
@@ -185,6 +194,5 @@ impl ResultDetails {
 }
 
 serialize_empty!(CallOptions);
-serialize_empty!(InvocationDetails);
 serialize_empty!(YieldOptions);
 serialize_empty!(ResultDetails);

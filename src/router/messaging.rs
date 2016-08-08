@@ -69,6 +69,12 @@ impl ConnectionHandler {
             Message::Unregister(request_id, procedure_id) => {
                 self.handle_unregister(request_id, procedure_id)
             },
+            Message::Call(request_id, options, procedure, args, kwargs) => {
+                self.handle_call(request_id, options, procedure, args, kwargs)
+            },
+            Message::Yield(invocation_id, options, args, kwargs) => {
+                self.handle_yield(invocation_id, options, args, kwargs)
+            }
             t => {
                 Err(Error::new(ErrorKind::InvalidMessageType(t)))
             }

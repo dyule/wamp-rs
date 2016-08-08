@@ -1,6 +1,6 @@
-//! Contains the `PatternNode` struct, which is used for constructing a trie corresponding
+//! Contains the `SubscriptionPatternNode` struct, which is used for constructing a trie corresponding
 //! to pattern based subscription
-use super::{ConnectionInfo, random_id};
+use super::super::{ConnectionInfo, random_id};
 use ::{ID, URI, MatchingPolicy};
 use messages::Reason;
 use std::sync::{Arc, Mutex};
@@ -15,53 +15,12 @@ use std::fmt::{Debug, Formatter, self};
 /// Each level of the trie corresponds to a fragment of a uri between the '.' character.
 /// Thus each subscription that starts with 'com' for example will be grouped together.
 /// Subscriptions can be added and removed, and the connections that match a particular URI
-/// can be iterated over using the `filter()` method.
+/// can be found using the `get_registrant_for()` method.
 ///
-/// # Example
-///
-/// ```
-/// # use wamp::{URI, MatchingPolicy, ID};
-/// # use wamp::router::patterns::{PatternNode, PatternData};
-/// # struct MockData {
-/// #     id: ID
-/// # }
-/// #
-/// # impl PatternData for MockData {
-/// #     fn get_id(&self) -> ID {
-/// #         self.id
-/// #     }
-/// # }
-/// #
-/// # impl MockData {
-/// #     fn new(id: ID) -> MockData {
-/// #        MockData {
-/// #            id: id
-/// #        }
-/// #     }
-/// # }
-/// #
-/// # let connection1 = MockData::new(1);
-/// # let connection2 = MockData::new(2);
-/// # let connection3 = MockData::new(3);
-/// # let connection4 = MockData::new(4);
-/// let mut root = PatternNode::new();
-///
-/// root.subscribe_with(&URI::new("com.example.test..topic"), connection1,
-///                     MatchingPolicy::Wildcard).unwrap();
-/// root.subscribe_with(&URI::new("com.example.test.specific.topic"), connection2,
-///                     MatchingPolicy::Strict).unwrap();
-/// root.subscribe_with(&URI::new("com.example"), connection3, MatchingPolicy::Prefix).unwrap();
-/// root.subscribe_with(&URI::new("com.example.test"), connection4, MatchingPolicy::Prefix).unwrap();
-/// for (connection, _id, _policy) in root.filter(URI::new("com.example.test.specific.topic")) {
-///      println!("Connection ID: {}", connection.get_id());
-///      // Will print connections ids in the order 3, 4, 1, 2
-///      // The `_id` is a randomly assigned value for that subscription
-///      // `_policy` is the `MatchingPolicy` that was used when the connection was added
-/// }
-/// ```
 
-pub struct PatternNode<P:PatternData> {
-    edges: HashMap<String, PatternNode<P>>,
+
+pub struct SubscriptionPatternNode<P:PatternData> {
+    edges: HashMap<String, SubscriptionPatternNode<P>>,
     connections: Vec<DataWrapper<P>>,
     prefix_connections: Vec<DataWrapper<P>>,
     id: ID,
@@ -78,7 +37,7 @@ struct DataWrapper<P: PatternData> {
     policy: MatchingPolicy
 }
 
-/// A lazy iterator that traverses the pattern trie.  See `PatternNode` for more.
+/// A lazy iterator that traverses the pattern trie.  See `SubscriptionPatternNode` for more.
 pub struct MatchIterator<'a, P> where
         P : PatternData,
         P : 'a {
@@ -89,7 +48,7 @@ pub struct MatchIterator<'a, P> where
 struct StackFrame<'a, P> where
         P : PatternData,
         P : 'a {
-    node: &'a PatternNode<P>,
+    node: &'a SubscriptionPatternNode<P>,
     state: IterState<'a, P>,
     depth: usize,
     parent: Option<Box<StackFrame<'a, P>>>
@@ -147,13 +106,13 @@ impl<'a, P:PatternData> Debug for IterState<'a, P>{
     }
 }
 
-impl<P:PatternData> Debug for PatternNode <P>{
+impl<P:PatternData> Debug for SubscriptionPatternNode <P>{
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         self.fmt_with_indent(f, 0)
     }
 }
 
-impl<P:PatternData> PatternNode<P> {
+impl<P:PatternData> SubscriptionPatternNode<P> {
 
     fn fmt_with_indent(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
         try!(writeln!(f, "{} pre: {:?} subs: {:?}",
@@ -177,7 +136,7 @@ impl<P:PatternData> PatternNode<P> {
             Some(initial) => initial,
             None          => return Err(PatternError::new(Reason::InvalidURI))
         };
-        let edge = self.edges.entry(initial.to_string()).or_insert(PatternNode::new());
+        let edge = self.edges.entry(initial.to_string()).or_insert(SubscriptionPatternNode::new());
         edge.add_subscription(uri_bits, subscriber, matching_policy)
     }
 
@@ -187,10 +146,10 @@ impl<P:PatternData> PatternNode<P> {
         self.remove_subscription(uri_bits, subscriber.get_id(), is_prefix)
     }
 
-    /// Constructs a new PatternNode to be used as the root of the trie
+    /// Constructs a new SubscriptionPatternNode to be used as the root of the trie
     #[inline]
-    pub fn new() -> PatternNode<P> {
-        PatternNode {
+    pub fn new() -> SubscriptionPatternNode<P> {
+        SubscriptionPatternNode {
             edges: HashMap::new(),
             connections: Vec::new(),
             prefix_connections: Vec::new(),
@@ -207,7 +166,7 @@ impl<P:PatternData> PatternNode<P> {
                         return Err(PatternError::new(Reason::InvalidURI));
                     }
                 }
-                let edge = self.edges.entry(uri_bit.to_string()).or_insert(PatternNode::new());
+                let edge = self.edges.entry(uri_bit.to_string()).or_insert(SubscriptionPatternNode::new());
                 edge.add_subscription(uri_bits, subscriber, matching_policy)
             },
             None => {
@@ -270,7 +229,7 @@ impl<P:PatternData> PatternNode<P> {
 
 impl <'a, P: PatternData> MatchIterator<'a, P> {
 
-    fn push(&mut self, child: &'a PatternNode<P>) {
+    fn push(&mut self, child: &'a SubscriptionPatternNode<P>) {
         let new_node = Box::new(StackFrame {
             parent: None,
             depth: self.current.depth + 1,
@@ -382,7 +341,7 @@ impl <'a, P: PatternData> MatchIterator<'a, P> {
  #[cfg(test)]
  mod test {
      use ::{URI, MatchingPolicy, ID};
-     use super::{PatternNode, PatternData};
+     use super::{SubscriptionPatternNode, PatternData};
 
      #[derive(Clone)]
      struct MockData {
@@ -408,7 +367,7 @@ impl <'a, P: PatternData> MatchIterator<'a, P> {
           let connection2 = MockData::new(2);
           let connection3 = MockData::new(3);
           let connection4 = MockData::new(4);
-          let mut root = PatternNode::new();
+          let mut root = SubscriptionPatternNode::new();
 
           let ids = [
             root.subscribe_with(&URI::new("com.example.test..topic"), connection1, MatchingPolicy::Wildcard).unwrap(),
@@ -429,7 +388,7 @@ impl <'a, P: PatternData> MatchIterator<'a, P> {
         let connection2 = MockData::new(2);
         let connection3 = MockData::new(3);
         let connection4 = MockData::new(4);
-        let mut root = PatternNode::new();
+        let mut root = SubscriptionPatternNode::new();
 
         let ids = [
           root.subscribe_with(&URI::new("com.example.test..topic"), connection1.clone(), MatchingPolicy::Wildcard).unwrap(),

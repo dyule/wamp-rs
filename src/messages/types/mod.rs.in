@@ -79,12 +79,28 @@ pub enum MatchingPolicy {
     Strict
 }
 
+/// The policies that dictate how invocations are distributed amongst shared registrations
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum InvocationPolicy {
+    // Only one reigistration per uri (the default)
+    Single,
+    // Callee selcted sequentially from the list of registrants
+    RoundRobin,
+    // Callee selcted randomly from the list of registrants
+    Random,
+    // First callee (in orer of registration) is called
+    First,
+    // Last callee (in order of registration( is called
+    Last
+}
+
 
 /**************************
         Visitors
 **************************/
 
 struct MatchingPolicyVisitor;
+struct InvocationPolicyVisitor;
 struct EmptyVisitor;
 
 
@@ -98,6 +114,13 @@ impl MatchingPolicy {
     }
 }
 
+impl InvocationPolicy {
+    #[inline]
+    fn is_single(&self) -> bool {
+        self == &InvocationPolicy::Single
+    }
+}
+
 impl Default for MatchingPolicy {
     #[inline]
     fn default() -> MatchingPolicy {
@@ -105,6 +128,12 @@ impl Default for MatchingPolicy {
     }
 }
 
+impl Default for InvocationPolicy {
+    #[inline]
+    fn default() -> InvocationPolicy {
+        InvocationPolicy::Single
+    }
+}
 
 /**************************
  Serializers/Deserializers
@@ -157,7 +186,49 @@ impl serde::de::Visitor for MatchingPolicyVisitor {
         match value {
             "prefix" => Ok(MatchingPolicy::Prefix),
             "wildcard" => Ok(MatchingPolicy::Wildcard),
-            x => Err(serde::de::Error::custom(format!("Invalid message error type: {}", x)))
+            x => Err(serde::de::Error::custom(format!("Invalid matching policy: {}", x)))
+        }
+    }
+
+}
+
+impl serde::Serialize for InvocationPolicy {
+    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+        where S: serde::Serializer,
+    {
+        let ser_str = match *self {
+             InvocationPolicy::Single => "single",
+             InvocationPolicy::RoundRobin => "roundrobin",
+             InvocationPolicy::Random => "random",
+             InvocationPolicy::First => "first",
+             InvocationPolicy::Last => "last",
+        };
+        serializer.serialize_str(ser_str)
+    }
+}
+
+impl serde::Deserialize for InvocationPolicy {
+    fn deserialize<D>(deserializer: &mut D) -> Result<InvocationPolicy, D::Error>
+        where D: serde::Deserializer,
+    {
+        deserializer.deserialize(InvocationPolicyVisitor)
+    }
+}
+
+impl serde::de::Visitor for InvocationPolicyVisitor {
+    type Value = InvocationPolicy;
+
+    #[inline]
+    fn visit_str<E>(&mut self, value: &str) -> Result<InvocationPolicy, E>
+        where E: serde::de::Error,
+    {
+        match value {
+            "single" => Ok(InvocationPolicy::Single),
+            "roundrobin" => Ok(InvocationPolicy::RoundRobin),
+            "random" => Ok(InvocationPolicy::Random),
+            "first" => Ok(InvocationPolicy::First),
+            "last" => Ok(InvocationPolicy::Last),
+            x => Err(serde::de::Error::custom(format!("Invalid invocation policy: {}", x)))
         }
     }
 

@@ -1,4 +1,3 @@
-pub mod patterns;
 mod handshake;
 mod messaging;
 mod pubsub;
@@ -10,18 +9,20 @@ use std::collections::{HashMap};
 use std::marker::Sync;
 use rand::{thread_rng};
 use rand::distributions::{Range, IndependentSample};
-use router::patterns::PatternNode;
+use router::pubsub::SubscriptionPatternNode;
+use router::rpc::RegistrationPatternNode;
 use super::ID;
 
 
 struct SubscriptionManager {
-    subscriptions : PatternNode<Arc<Mutex<ConnectionInfo>>>,
+    subscriptions : SubscriptionPatternNode<Arc<Mutex<ConnectionInfo>>>,
     subscription_ids_to_uris: HashMap<u64, (String, bool)>
 }
 
 struct RegistrationManager {
-    registrations : PatternNode<Arc<Mutex<ConnectionInfo>>>,
-    registration_ids_to_uris: HashMap<u64, (String, bool)>
+    registrations : RegistrationPatternNode<Arc<Mutex<ConnectionInfo>>>,
+    registration_ids_to_uris: HashMap<u64, (String, bool)>,
+    active_calls: HashMap<ID, (ID, Arc<Mutex<ConnectionInfo>>)>
 }
 
 struct Realm {
@@ -66,6 +67,7 @@ static WAMP_MSGPACK:&'static str = "wamp.2.msgpack";
 
 fn random_id() -> u64 {
     let mut rng = thread_rng();
+    // TODO make this a constant
     let between = Range::new(0, 1u64.rotate_left(56) - 1);
     between.ind_sample(&mut rng)
 }
@@ -109,12 +111,13 @@ impl Router {
         realms.insert(realm.to_string(), Arc::new(Mutex::new(Realm {
             connections: Vec::new(),
             subscription_manager: SubscriptionManager {
-                subscriptions: PatternNode::new(),
+                subscriptions: SubscriptionPatternNode::new(),
                 subscription_ids_to_uris: HashMap::new()
             },
             registration_manager: RegistrationManager {
-                registrations: PatternNode::new(),
-                registration_ids_to_uris: HashMap::new()
+                registrations: RegistrationPatternNode::new(),
+                registration_ids_to_uris: HashMap::new(),
+                active_calls: HashMap::new()
             }
         })));
         debug!("Added realm {}", realm);
@@ -156,7 +159,7 @@ impl ConnectionHandler{
                     for registration_id in self.registered_procedures.iter() {
                         match manager.registration_ids_to_uris.remove(&registration_id) {
                             Some((topic_uri, is_prefix)) => {
-                                manager.registrations.unsubscribe_with(&topic_uri, &self.info, is_prefix).ok();
+                                manager.registrations.unregister_with(&topic_uri, &self.info, is_prefix).ok();
                             },
                             None => {}
                         }

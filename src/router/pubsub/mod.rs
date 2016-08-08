@@ -1,8 +1,10 @@
+mod patterns;
 use super::{ConnectionHandler, random_id};
 
 use router::messaging::send_message;
 use messages::{Message, URI, SubscribeOptions, PublishOptions, EventDetails, ErrorType, Reason};
 use ::{List, Dict,  MatchingPolicy, WampResult, Error, ErrorKind};
+pub use router::pubsub::patterns::SubscriptionPatternNode;
 
 impl ConnectionHandler{
     pub fn handle_subscribe(&mut self, request_id: u64, options: SubscribeOptions, topic: URI) -> WampResult<()> {

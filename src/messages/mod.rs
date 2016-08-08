@@ -31,7 +31,7 @@ pub enum Message {
     Unregister(ID, ID),
     Unregistered(ID),
     Call(ID, CallOptions, URI, Option<List>, Option<Dict>),
-    Invocation(ID, InvocationDetails, ID, Option<List>, Option<Dict>),
+    Invocation(ID, ID, InvocationDetails, Option<List>, Option<Dict>),
     Yield(ID, YieldOptions, Option<List>, Option<Dict>),
     Result(ID, ResultDetails, Option<List>, Option<Dict>),
 }
@@ -111,8 +111,8 @@ impl serde::Serialize for Message {
             Message::Call(id, ref options, ref topic, ref args, ref kwargs) => {
                 serialize_with_args!(args, kwargs, serializer, 48, id, options, topic)
             },
-            Message::Invocation(id, ref details, registration_id, ref args, ref kwargs) => {
-                serialize_with_args!(args, kwargs, serializer, 68, id, details, registration_id)
+            Message::Invocation(id, registration_id, ref details, ref args, ref kwargs) => {
+                serialize_with_args!(args, kwargs, serializer, 68, id, registration_id, details)
             },
             Message::Yield(id, ref options, ref args, ref kwargs) => {
                 serialize_with_args!(args, kwargs, serializer, 70, id, options)
@@ -271,12 +271,12 @@ impl MessageVisitor {
 
     fn visit_invocation<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let id = try_or!(visitor.visit(), "Invocation message ended before session id");
-        let details = try_or!(visitor.visit(), "Invocation message ended before details dict");
         let registration_id = try_or!(visitor.visit(), "Invocation message ended before registration id");
+        let details = try_or!(visitor.visit(), "Invocation message ended before details dict");
         let args = try!(visitor.visit());
         let kwargs = try!(visitor.visit());
         try!(visitor.end());
-        Ok(Message::Invocation(id, details, registration_id, args, kwargs))
+        Ok(Message::Invocation(id, registration_id, details, args, kwargs))
     }
 
     fn visit_yield<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
@@ -564,19 +564,19 @@ mod test {
     #[test]
     fn serialize_invocation() {
         two_way_test!(
-            Message::Invocation(7814135, InvocationDetails::new(), 9823526, None, None),
-            "[68,7814135,{},9823526]"
+            Message::Invocation(7814135, 9823526, InvocationDetails::new(), None, None),
+            "[68,7814135,9823526,{}]"
         );
 
         two_way_test!(
-            Message::Invocation(764346, InvocationDetails::new(), 9823526, Some(vec![Value::String("a value".to_string())]), None),
-            "[68,764346,{},9823526,[\"a value\"]]"
+            Message::Invocation(764346, 9823526, InvocationDetails::new(), Some(vec![Value::String("a value".to_string())]), None),
+            "[68,764346,9823526,{},[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
         kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
         two_way_test!(
-            Message::Invocation(764346, InvocationDetails::new(), 9823526, Some(Vec::new()), Some(kwargs)),
-            "[68,764346,{},9823526,[],{\"key1\":[5]}]"
+            Message::Invocation(764346, 9823526, InvocationDetails::new(), Some(Vec::new()), Some(kwargs)),
+            "[68,764346,9823526,{},[],{\"key1\":[5]}]"
         )
     }
 

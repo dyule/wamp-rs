@@ -27,7 +27,7 @@ use std::sync::mpsc::SendError;
 use serde_json::Error as JSONError;
 use rmp_serde::decode::Error as MsgPackError;
 
-pub use messages::{URI, Dict, List, Value, Reason, MatchingPolicy};
+pub use messages::{URI, Dict, List, Value, Reason, MatchingPolicy, InvocationPolicy};
 use messages::{ErrorType, Message};
 
 pub type CallResult<T> = Result<T, Reason>;
