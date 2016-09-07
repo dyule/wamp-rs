@@ -11,9 +11,10 @@ mod inner {
         let out_dir = env::var_os("OUT_DIR").unwrap();
 
         let src = Path::new("src/messages/types/mod.rs.in");
-        let message_path = Path::new(&out_dir).join("messages").join("types");
+        let message_path = Path::new(&out_dir).join("messages");
         let dst = Path::new(&out_dir).join("messages").join("types").join("mod.rs");
-        let _ = fs::create_dir(message_path);
+        fs::create_dir(&message_path).unwrap();
+        fs::create_dir(message_path.join("types")).unwrap();
         serde_codegen::expand(&src, &dst).unwrap();
     }
 }

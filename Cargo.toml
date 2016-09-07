@@ -3,14 +3,17 @@ name = "wamp"
 version = "0.1.0"
 authors = ["Daniel Yule <yule@cs.dal.ca>"]
 build = "build.rs"
+license = "MIT"
+homepage = "https://github.com/dyule/wamp-rs"
+repository = "https://github.com/dyule/wamp-rs"
 
 [lib]
 name = "wamp"
 path = "src/lib.rs"
 
 [features]
-stable = ["serde_codegen"]
-default = ["serde_macros"]
+default = ["serde_codegen"]
+nightly = ["serde_macros"]
 
 [build-dependencies]
 serde_codegen = { version = "0.7", optional = true }

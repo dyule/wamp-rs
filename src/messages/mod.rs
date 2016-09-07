@@ -378,11 +378,11 @@ mod test {
     fn serialize_hello() {
         two_way_test!(
             Message::Hello(URI::new("ca.dal.wamp.test"), HelloDetails::new(ClientRoles::new_basic())),
-            "[1,\"ca.dal.wamp.test\",{\"roles\":{\"publisher\":{},\"subscriber\":{}}}]"
+            "[1,\"ca.dal.wamp.test\",{\"roles\":{\"publisher\":{\"features\":{}},\"subscriber\":{\"features\":{}},\"caller\":{\"features\":{}},\"callee\":{\"features\":{}}}}]"
         );
         two_way_test!(
             Message::Hello(URI::new("ca.dal.wamp.test"), HelloDetails::new_with_agent(ClientRoles::new(), "dal_wamp")),
-            "[1,\"ca.dal.wamp.test\",{\"agent\":\"dal_wamp\",\"roles\":{\"publisher\":{},\"subscriber\":{\"pattern_based_subscription\":true}}}]"
+            "[1,\"ca.dal.wamp.test\",{\"agent\":\"dal_wamp\",\"roles\":{\"publisher\":{\"features\":{}},\"subscriber\":{\"features\":{\"pattern_based_subscription\":true}},\"caller\":{\"features\":{}},\"callee\":{\"features\":{}}}}]"
         )
     }
 

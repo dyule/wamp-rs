@@ -110,20 +110,20 @@ impl ClientRoles {
     #[inline]
     pub fn new() -> ClientRoles {
         ClientRoles {
-            publisher: PublisherRole{features: None},
+            publisher: PublisherRole{features: Some(HashMap::new())},
             subscriber: SubscriberRole{features: Some(SubscriberFeatures{pattern_based_subscription: true})},
-            caller: CallerRole{features: None},
-            callee: CalleeRole{features: None}
+            caller: CallerRole{features: Some(HashMap::new())},
+            callee: CalleeRole{features: Some(HashMap::new())}
         }
     }
 
     #[inline]
     pub fn new_basic() -> ClientRoles {
         ClientRoles {
-            publisher: PublisherRole{features: None},
+            publisher: PublisherRole{features: Some(HashMap::new())},
             subscriber: SubscriberRole{features: Some(SubscriberFeatures{pattern_based_subscription: false})},
-            caller: CallerRole{features: None},
-            callee: CalleeRole{features: None}
+            caller: CallerRole{features: Some(HashMap::new())},
+            callee: CalleeRole{features: Some(HashMap::new())}
         }
     }
 }

@@ -4,14 +4,24 @@ WAMP-RS
 WAMP-RS is a Rust implementation of the
 [Web Application Messaging Protcol (WAMP)](http://wamp-proto.org/).
 
-It is a work in progress, so as of yet, only the publisher, subscriber and broker
-roles have been implemented (and no advanced profile).  You can see an example
-of how to use them in the examples folder.
+At present the entire Basic Profile is supported, as well as pattern based subscriptions and registrations from the Advanced Profile.
 
-Building on Windows
--------------------
-WAMP-RS is dependent on
-[Rust-WebSocket](https://github.com/cyderize/rust-websocket), which is
-dependent on [rust-openssl](https://github.com/sfackler/rust-openssl).  In order
-to build rust-openssl (and therefore WAMP-RS) on Windows, take a look a the
-instructions at [https://github.com/sfackler/rust-openssl#windows]
+There is currently no support for secure connections.
+
+For instructions on how to use, please see the [examples](examples) directory.
+
+To include in your project, place the following in your `Cargo.toml`
+
+```toml
+[dependencies]
+wamp = "0.1"
+```
+
+# Contributing
+
+WAMP-RS uses [serde-rs](https://github.com/serde-rs/serde).  For better error messages, compile using rust nightly, and enable the nightly features:
+
+```
+rustup override set nightly
+cargo build --no-default-features --features nightly
+```
