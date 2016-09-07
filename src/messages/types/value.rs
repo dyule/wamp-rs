@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use CallResult;
 use serde;
-
+use super::{Reason, CallError};
 
 pub type Dict = HashMap<String, Value>;
 pub type List = Vec<Value>;
@@ -25,7 +25,7 @@ pub enum Value {
     // The ID and URI types cannot be distinguished from string and integer types respectively.
     // So, we just ignore them here
     Dict(Dict),
-    Integer(u64),
+    Integer(i64),
     String(String),
     List(List),
     Boolean(bool)
@@ -35,13 +35,123 @@ struct URIVisitor;
 struct ValueVisitor;
 
 
-trait ListAccess {
-    fn get_int(&self, index: usize) -> CallResult<u64>;
+pub trait ArgList {
+    fn get_int(&self, index: usize) -> CallResult<Option<i64>>;
+    fn get_string<'a>(&'a self, index: usize) -> CallResult<Option<&'a str>>;
+    fn verify_len(&self, expected_len: usize) -> CallResult<()>;
 }
 
-impl ListAccess for List {
-    fn get_int(&self, index: usize) -> CallResult<u64> {
-        Ok(0)
+pub trait ArgDict {
+    fn get_int(&self, key: &str) -> CallResult<Option<i64>>;
+    fn get_string<'a>(&'a self, key: &str) -> CallResult<Option<&'a str>>;
+}
+
+impl ArgList for List {
+    fn get_int(&self, index: usize) -> CallResult<Option<i64>> {
+        let value = self.get(index);
+        match value {
+            Some(value) => {
+                if let &Value::Integer(value) = value {
+                    Ok(Some(value))
+                } else {
+                    Err(CallError::new(Reason::InvalidArgument, Some(vec![Value::String(format!("Expected integer, got {}", value.summarize()))]), None))
+                }
+            },
+            None => {
+                Ok(None)
+            }
+        }
+    }
+
+    fn get_string<'a>(&'a self, index: usize) -> CallResult<Option<&'a str>> {
+        let value = self.get(index);
+        match value {
+            Some(value) => {
+                if let &Value::String(ref value) = value {
+                    Ok(Some(value))
+                } else {
+                    Err(CallError::new(Reason::InvalidArgument, Some(vec![Value::String(format!("Expected string, got {}", value.summarize()))]), None))
+                }
+            },
+            None => {
+                Ok(None)
+            }
+        }
+    }
+
+    fn verify_len(&self, expected_len: usize) -> CallResult<()> {
+        if self.len() >= expected_len {
+            Ok(())
+        } else {
+            Err(CallError::new(Reason::InvalidArgument, Some(vec![Value::String(format!("Expected {} arguments, got {}", expected_len, self.len()))]), None))
+        }
+    }
+}
+
+impl ArgDict for Dict {
+    fn get_int(&self, key: &str) -> CallResult<Option<i64>> {
+        let value = self.get(key);
+        match value {
+            Some(value) => {
+                if let &Value::Integer(value) = value {
+                    Ok(Some(value))
+                } else {
+                    Err(CallError::new(Reason::InvalidArgument, Some(vec![Value::String(format!("Expected integer, got {}", value.summarize()))]), None))
+                }
+            },
+            None => {
+                Ok(None)
+            }
+        }
+    }
+    fn get_string<'a>(&'a self, key: &str) -> CallResult<Option<&'a str>> {
+        let value = self.get(key);
+        match value {
+            Some(value) => {
+                if let &Value::String(ref value) = value {
+                    Ok(Some(value))
+                } else {
+                    Err(CallError::new(Reason::InvalidArgument, Some(vec![Value::String(format!("Expected string, got {}", value.summarize()))]), None))
+                }
+            },
+            None => {
+                Ok(None)
+            }
+        }
+    }
+}
+
+impl Value {
+    pub fn summarize(&self) -> String {
+        match self {
+            &Value::Dict(ref d) => {
+                let mut result = String::new();
+                result.push('{');
+                result.push_str(&d.iter().take(50).map(|(key, value)| format!("{}:{}", key, value.summarize())).collect::<Vec<_>>().join(","));
+                result.push('}');
+                result
+            },
+            &Value::Integer(i) => {
+                i.to_string()
+            },
+            &Value::String(ref s) => {
+                if s.len() > 50 {
+                    s[..50].to_string()
+                } else {
+                    s.clone()
+                }
+            }
+            &Value::List(ref l) => {
+                let mut result = String::new();
+                result.push('[');
+                result.push_str(&l.iter().take(50).map(|element| element.summarize()).collect::<Vec<_>>().join(","));
+                result.push(']');
+                result
+            }
+            &Value::Boolean(b) => {
+                b.to_string()
+            }
+        }
     }
 }
 
@@ -58,9 +168,15 @@ impl serde::de::Visitor for ValueVisitor {
 
 
     #[inline]
-    fn visit_u64<E>(&mut self, value: u64) -> Result<Value, E>
+    fn visit_i64<E>(&mut self, value: i64) -> Result<Value, E>
     where E: serde::de::Error {
         Ok(Value::Integer(value))
+    }
+
+    #[inline]
+    fn visit_u64<E>(&mut self, value: u64) -> Result<Value, E>
+    where E: serde::de::Error {
+        Ok(Value::Integer(value as i64))
     }
 
     #[inline]
@@ -111,7 +227,7 @@ impl serde::Serialize for Value {
         match *self {
             Value::Dict(ref dict) => dict.serialize(serializer),
             Value::String(ref s) => serializer.serialize_str(s),
-            Value::Integer(i) => serializer.serialize_u64(i),
+            Value::Integer(i) => serializer.serialize_i64(i),
             Value::List(ref list) => list.serialize(serializer),
             Value::Boolean(b) => serializer.serialize_bool(b)
         }

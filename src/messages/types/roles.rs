@@ -1,10 +1,12 @@
-use super::{is_not, EmptyVisitor};
-use serde;
+use super::{is_not};
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct ClientRoles {
     pub publisher: PublisherRole,
     pub subscriber: SubscriberRole,
+    pub caller: CallerRole,
+    pub callee: CalleeRole,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -16,14 +18,35 @@ pub struct RouterRoles {
 /**************************
           Roles
 **************************/
-#[derive(PartialEq, Debug)]
-pub struct PublisherRole;
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct PublisherRole {
+    #[serde(default, skip_serializing_if="Option::is_none")]
+    features: Option<HashMap<String, bool>>
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct CallerRole {
+    #[serde(default, skip_serializing_if="Option::is_none")]
+    features: Option<HashMap<String, bool>>
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct CalleeRole {
+    #[serde(default, skip_serializing_if="Option::is_none")]
+    features: Option<HashMap<String, bool>>
+}
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct SubscriberRole {
+    #[serde(default, skip_serializing_if="Option::is_none")]
+    features: Option<SubscriberFeatures>
+}
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct SubscriberFeatures {
     #[serde(skip_serializing_if="is_not", default)]
     pattern_based_subscription: bool
 }
+
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct DealerRole {
@@ -87,18 +110,20 @@ impl ClientRoles {
     #[inline]
     pub fn new() -> ClientRoles {
         ClientRoles {
-            publisher: PublisherRole{},
-            subscriber: SubscriberRole{pattern_based_subscription: true}
+            publisher: PublisherRole{features: None},
+            subscriber: SubscriberRole{features: Some(SubscriberFeatures{pattern_based_subscription: true})},
+            caller: CallerRole{features: None},
+            callee: CalleeRole{features: None}
         }
     }
 
     #[inline]
     pub fn new_basic() -> ClientRoles {
         ClientRoles {
-            publisher: PublisherRole{},
-            subscriber: SubscriberRole{pattern_based_subscription: false}
+            publisher: PublisherRole{features: None},
+            subscriber: SubscriberRole{features: Some(SubscriberFeatures{pattern_based_subscription: false})},
+            caller: CallerRole{features: None},
+            callee: CalleeRole{features: None}
         }
     }
 }
-
-serialize_empty!(PublisherRole);

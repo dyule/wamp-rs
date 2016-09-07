@@ -3,6 +3,7 @@ mod messaging;
 mod pubsub;
 mod rpc;
 
+
 use ws::{listen as ws_listen, Sender, Result as WSResult };
 use std::sync::{Arc, Mutex};
 use std::collections::{HashMap};
@@ -12,6 +13,10 @@ use rand::distributions::{Range, IndependentSample};
 use router::pubsub::SubscriptionPatternNode;
 use router::rpc::RegistrationPatternNode;
 use super::ID;
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
+use router::messaging::send_message;
+use messages::{ErrorDetails, Reason, Message};
 
 
 struct SubscriptionManager {
@@ -54,7 +59,7 @@ pub struct ConnectionInfo {
     id: u64
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 enum ConnectionState {
     Initializing,
     Connected,
@@ -85,22 +90,26 @@ impl Router {
         }
     }
 
-    pub fn listen(&self, url: &str) {
+    pub fn listen(&self, url: &str) -> JoinHandle<()> {
+        let router_info = self.info.clone();
+        let url = url.to_string();
+        thread::spawn(move ||{
+            ws_listen(&url[..], |sender| {
+                ConnectionHandler {
+                    info: Arc::new(Mutex::new(ConnectionInfo{
+                        state: ConnectionState::Initializing,
+                        sender: sender,
+                        protocol: String::new(),
+                        id: random_id()
+                    })),
+                    subscribed_topics: Vec::new(),
+                    registered_procedures: Vec::new(),
+                    realm: None,
+                    router: router_info.clone()
+                }
+            }).unwrap();
+        })
 
-        ws_listen(url, |sender| {
-            ConnectionHandler {
-                info: Arc::new(Mutex::new(ConnectionInfo{
-                    state: ConnectionState::Initializing,
-                    sender: sender,
-                    protocol: String::new(),
-                    id: random_id()
-                })),
-                subscribed_topics: Vec::new(),
-                registered_procedures: Vec::new(),
-                realm: None,
-                router: self.info.clone()
-            }
-        }).unwrap()
     }
 
     pub fn add_realm(&mut self, realm: &str) {
@@ -124,7 +133,15 @@ impl Router {
     }
 
     pub fn shutdown(&self) {
-
+        for realm in self.info.realms.lock().unwrap().values() {
+            for connection in realm.lock().unwrap().connections.iter() {
+                send_message(connection, &Message::Goodbye(ErrorDetails::new(), Reason::SystemShutdown)).ok();
+                let mut connection = connection.lock().unwrap();
+                connection.state = ConnectionState::ShuttingDown;
+            }
+        }
+        info!("Goodbye messages sent.  Waiting 5 seconds for response");
+        thread::sleep(Duration::from_secs(5));
         for realm in self.info.realms.lock().unwrap().values() {
             for connection in realm.lock().unwrap().connections.iter() {
                 let connection = connection.lock().unwrap();
@@ -144,11 +161,15 @@ impl ConnectionHandler{
 
                 let mut realm = realm.lock().unwrap();
                 {
+                    trace!("Removing subscriptions for client {}", self.info.lock().unwrap().id);
                     let mut manager = &mut realm.subscription_manager;
                     for subscription_id in self.subscribed_topics.iter() {
-                        match manager.subscription_ids_to_uris.remove(&subscription_id) {
-                            Some((topic_uri, is_prefix)) => {
-                                manager.subscriptions.unsubscribe_with(&topic_uri, &self.info, is_prefix).ok();
+                        trace!("Looking for subscription {}", subscription_id);
+                        match manager.subscription_ids_to_uris.get(&subscription_id) {
+                            Some(&(ref topic_uri, is_prefix)) => {
+                                trace!("Removing subscription to {:?}", topic_uri);
+                                manager.subscriptions.unsubscribe_with(topic_uri, &self.info, is_prefix).ok();
+                                trace!("Subscription tree: {:?}", manager.subscriptions);
                             },
                             None => {}
                         }
@@ -157,9 +178,9 @@ impl ConnectionHandler{
                 {
                     let mut manager = &mut realm.registration_manager;
                     for registration_id in self.registered_procedures.iter() {
-                        match manager.registration_ids_to_uris.remove(&registration_id) {
-                            Some((topic_uri, is_prefix)) => {
-                                manager.registrations.unregister_with(&topic_uri, &self.info, is_prefix).ok();
+                        match manager.registration_ids_to_uris.get(&registration_id) {
+                            Some(&(ref topic_uri, is_prefix)) => {
+                                manager.registrations.unregister_with(topic_uri, &self.info, is_prefix).ok();
                             },
                             None => {}
                         }

@@ -3,7 +3,6 @@
 
 extern crate serde;
 extern crate serde_json;
-extern crate websocket;
 extern crate ws;
 extern crate url;
 extern crate rmp;
@@ -19,7 +18,6 @@ mod utils;
 pub mod client;
 pub mod router;
 
-use websocket::result::WebSocketError;
 use ws::Error as WSError;
 use std::fmt;
 use url::ParseError;
@@ -27,10 +25,12 @@ use std::sync::mpsc::SendError;
 use serde_json::Error as JSONError;
 use rmp_serde::decode::Error as MsgPackError;
 
-pub use messages::{URI, Dict, List, Value, Reason, MatchingPolicy, InvocationPolicy};
+pub use messages::{URI, Dict, List, Value, Reason, MatchingPolicy, InvocationPolicy, CallError, ArgList, ArgDict};
 use messages::{ErrorType, Message};
+pub use client::{Client, Connection};
+pub use router::Router;
 
-pub type CallResult<T> = Result<T, Reason>;
+pub type CallResult<T> = Result<T, CallError>;
 pub type WampResult<T> = Result<T, Error>;
 pub type ID = u64;
 
@@ -41,17 +41,18 @@ pub struct Error {
 
 #[derive(Debug)]
 pub enum ErrorKind {
-    WebSocketError(WebSocketError),
     WSError(WSError),
     URLError(ParseError),
     UnexpectedMessage(&'static str), // Used when a peer receives another message before Welcome or Hello
     ThreadError(SendError<messages::Message>),
     ConnectionLost,
+    Closing(String),
     JSONError(JSONError),
     MsgPackError(MsgPackError),
     MalformedData,
     InvalidMessageType(Message),
     InvalidState(&'static str),
+    Timeout,
     ErrorReason(ErrorType, ID, Reason),
 }
 impl Error {
@@ -81,17 +82,18 @@ impl fmt::Display for Error {
 impl ErrorKind {
     fn description(&self) -> String {
         match self {
-            &ErrorKind::WebSocketError(ref e) => e.to_string(),
             &ErrorKind::WSError(ref e) => e.to_string(),
             &ErrorKind::UnexpectedMessage(s) => s.to_string(),
             &ErrorKind::URLError(ref e) => e.to_string(),
             &ErrorKind::ThreadError(ref e) => e.to_string(),
             &ErrorKind::ConnectionLost => "Connection Lost".to_string(),
+            &ErrorKind::Closing(ref s) => s.clone(),
             &ErrorKind::JSONError(ref e) => e.to_string(),
             &ErrorKind::MsgPackError(ref e) => e.to_string(),
             &ErrorKind::MalformedData => "Malformed Data".to_string(),
             &ErrorKind::InvalidMessageType(ref t) => format!("Invalid Message Type: {:?}", t),
             &ErrorKind::InvalidState(ref s) => s.to_string(),
+            &ErrorKind::Timeout => "Connection timed out".to_string(),
             &ErrorKind::ErrorReason(_, _, ref s) => s.to_string(),
         }
     }

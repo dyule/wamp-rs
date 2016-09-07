@@ -4,46 +4,30 @@ extern crate eventual;
 extern crate log;
 extern crate env_logger;
 
-use wamp::client::{Connection, Client, Subscription};
-use wamp::{URI, Value, MatchingPolicy, Dict, List, CallResult, Reason};
+use wamp::client::Connection;
+use wamp::{URI, Value, Dict, List, CallResult, ArgList};
 use std::io;
-use std::sync::{Mutex, Arc};
 use eventual::Async;
-use std::collections::HashMap;
-use std::slice::Iter;
 
-fn addition_callback(args: List, _kwargs: Dict) -> CallResult<(List, Dict)> {
-    let mut args_iter = args.iter();
-    let a = try!(extract_int(&mut args_iter));
-    let b = try!(extract_int(&mut args_iter));
-    Ok((vec![Value::Integer(a + b)], HashMap::new()))
+fn addition_callback(args: List, _kwargs: Dict) -> CallResult<(Option<List>, Option<Dict>)> {
+    info!("Performing addition");
+    try!(args.verify_len(2));
+    let a = try!(args.get_int(0)).unwrap();
+    let b = try!(args.get_int(1)).unwrap();
+    Ok((Some(vec![Value::Integer(a + b)]), None))
 }
 
-fn multiplication_callback(args: List, _kwargs: Dict) -> CallResult<(List, Dict)> {
-    let mut args_iter = args.iter();
-    let a = try!(extract_int(&mut args_iter));
-    let b = try!(extract_int(&mut args_iter));
-    Ok((vec![Value::Integer(a * b)], HashMap::new()))
+fn multiplication_callback(args: List, _kwargs: Dict) -> CallResult<(Option<List>, Option<Dict>)> {
+    info!("Performing multiplication");
+    try!(args.verify_len(2));
+    let a = try!(args.get_int(0)).unwrap();
+    let b = try!(args.get_int(1)).unwrap();
+    Ok((Some(vec![Value::Integer(a * b)]), None))
 }
 
-fn echo_callback(args: List, kwargs: Dict) -> CallResult<(List, Dict)> {
-    Ok((args, kwargs))
-}
-
-fn extract_int(arg_iter: &mut Iter<Value>) -> CallResult<u64> {
-    let value = arg_iter.next();
-    match value {
-        Some(value) => {
-            if let &Value::Integer(value) = value {
-                Ok(value)
-            } else {
-                Err(Reason::InvalidArgument)
-            }
-        },
-        None => {
-            Err(Reason::InvalidArgument)
-        }
-    }
+fn echo_callback(args: List, kwargs: Dict) -> CallResult<(Option<List>, Option<Dict>)> {
+    info!("Performing echo");
+    Ok((Some(args), Some(kwargs)))
 }
 
 fn main() {
@@ -54,16 +38,16 @@ fn main() {
 
     info!("Connected");
     info!("Registering Addition Procedure");
-    client.register(URI::new("com.test.add"), Box::new(addition_callback)).unwrap().await().unwrap();
+    client.register(URI::new("ca.test.add"), Box::new(addition_callback)).unwrap().await().unwrap();
 
     info!("Registering Multiplication Procedure");
-    let mult_reg = client.register(URI::new("com.test.mult"), Box::new(multiplication_callback)).unwrap().await().unwrap();
+    let mult_reg = client.register(URI::new("ca.test.mult"), Box::new(multiplication_callback)).unwrap().await().unwrap();
 
     info!("Unregistering Multiplication Procedure");
     client.unregister(mult_reg).unwrap().await().unwrap();
 
     info!("Registering Echo Procedure");
-    let mult_reg = client.register(URI::new("com.test.mult"), Box::new(multiplication_callback)).unwrap().await().unwrap();
+    client.register(URI::new("ca.test.echo"), Box::new(echo_callback)).unwrap().await().unwrap();
 
     println!("Press enter to quit");
     let mut input = String::new();

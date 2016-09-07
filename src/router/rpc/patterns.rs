@@ -1,13 +1,11 @@
 //! Contains the `RegistrationPatternNode` struct, which is used for constructing a trie corresponding
 //! to pattern based registration
 use super::super::{ConnectionInfo, random_id};
-use ::{ID, URI, MatchingPolicy, InvocationPolicy, Error, ErrorKind};
+use ::{ID, URI, MatchingPolicy, InvocationPolicy};
 use messages::Reason;
 use std::sync::{Arc, Mutex};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::slice::Iter;
-use std::mem;
 use std::fmt::{Debug, Formatter, self};
 use rand::thread_rng;
 use rand::Rng;
@@ -200,10 +198,10 @@ impl<P:PatternData> RegistrationPatternNode<P> {
             },
             None => {
                 if matching_policy == MatchingPolicy::Prefix {
-                    self.prefix_connections.add_procedure(registrant, matching_policy, invocation_policy);
+                    try!(self.prefix_connections.add_procedure(registrant, matching_policy, invocation_policy));
                     Ok(self.prefix_id)
                 } else {
-                    self.connections.add_procedure(registrant, matching_policy, invocation_policy);
+                    try!(self.connections.add_procedure(registrant, matching_policy, invocation_policy));
                     Ok(self.id)
                 }
             }

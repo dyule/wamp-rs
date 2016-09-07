@@ -127,7 +127,7 @@ fn publish(client: &mut Client, args: Vec<String>) {
     let mut topic_arr = args.clone();
     let args = topic_arr.split_off(1);
     let args = args.iter().map(|arg|{
-        match arg.parse::<u64>() {
+        match arg.parse::<i64>() {
             Ok(i)  => Value::Integer(i),
             Err(_) => Value::String(arg.clone())
         }
@@ -176,7 +176,7 @@ fn event_loop(mut client: Client) {
 
 fn main() {
     env_logger::init().unwrap();
-    let connection = Connection::new("ws://127.0.0.1:8090/ws", "realm1");
+    let connection = Connection::new("ws://127.0.0.1:8090/ws", "kitchen_realm");
     info!("Connecting");
     let client = connection.connect().unwrap();
 

@@ -1,5 +1,5 @@
-use super::{ConnectionHandler, ConnectionInfo, WAMP_JSON};
-use ws::{Sender, Handler, Message as WSMessage, Error as WSError, ErrorKind as WSErrorKind, Result as WSResult, Request, Response,};
+use super::{ConnectionHandler, ConnectionInfo, WAMP_JSON, ConnectionState};
+use ws::{Sender, Handler, Message as WSMessage, Error as WSError, ErrorKind as WSErrorKind, Result as WSResult, Request, Response, CloseCode};
 use std::sync::{Arc, Mutex};
 
 use std::collections::{HashMap};
@@ -10,7 +10,7 @@ use rmp_serde::Serializer;
 use utils::StructMapWriter;
 use std::io::Cursor;
 use messages::{Message, ErrorType, Reason};
-use ::{ ID, WampResult, Error, ErrorKind};
+use ::{ID, WampResult, Error, ErrorKind, Dict, List};
 
 
 pub fn send_message(info: &Arc<Mutex<ConnectionInfo>>, message: &Message) -> WampResult<()> {
@@ -75,9 +75,34 @@ impl ConnectionHandler {
             Message::Yield(invocation_id, options, args, kwargs) => {
                 self.handle_yield(invocation_id, options, args, kwargs)
             }
+            Message::Error(e_type, request_id, details, reason, args, kwargs) => {
+                self.handle_error(e_type, request_id, details, reason, args, kwargs)
+            }
             t => {
                 Err(Error::new(ErrorKind::InvalidMessageType(t)))
             }
+        }
+    }
+
+    fn handle_error(&mut self, e_type: ErrorType, request_id: ID, details: Dict, reason: Reason, args: Option<List>, kwargs: Option<Dict>) -> WampResult<()> {
+        if e_type == ErrorType::Invocation {
+            debug!("Responding to error message for invocation (id: {})", request_id);
+            match self.realm {
+                Some(ref realm) => {
+                    let mut realm = realm.lock().unwrap();
+                    let mut manager = &mut realm.registration_manager;
+                    if let Some((call_id, callee)) = manager.active_calls.remove(&request_id) {
+                        let error_message = Message::Error(ErrorType::Call, call_id, details, reason, args, kwargs);
+                        send_message(&callee, &error_message)
+                    } else {
+                        Err(Error::new(ErrorKind::InvalidState("Recieved an error message for a call that wasn't sent")))
+                    }
+                }, None => {
+                    Err(Error::new(ErrorKind::InvalidState("Recieved a message while not attached to a realm")))
+                }
+            }
+        } else {
+            Err(Error::new(ErrorKind::InvalidState("Got an error message that was not for a call message")))
         }
     }
 
@@ -113,11 +138,9 @@ impl ConnectionHandler {
             }
         })
     }
-
     fn on_message_error(&mut self, error: Error) -> WSResult<()> {
         use std::error::Error as StdError;
         match error.get_kind() {
-            ErrorKind::WebSocketError(_) => {unimplemented!()},
             ErrorKind::WSError(e) => Err(e),
             ErrorKind::URLError(_) => {unimplemented!()},
             ErrorKind::UnexpectedMessage(msg) => {
@@ -126,8 +149,9 @@ impl ConnectionHandler {
             },
             ErrorKind::ThreadError(_) => {unimplemented!()},
             ErrorKind::ConnectionLost => {unimplemented!()},
+            ErrorKind::Closing(_) => {unimplemented!{}},
             ErrorKind::JSONError(e) => {
-                error!("Could not parse JSON: {}", e.description());
+                error!("Could not parse JSON: {}", e);
                 self.terminate_connection()
             },
             ErrorKind::MsgPackError(e) => {
@@ -145,6 +169,11 @@ impl ConnectionHandler {
                 error!("Invalid State: {}", s);
                 self.terminate_connection()
             },
+            ErrorKind::Timeout => {
+                error!("Connection timeout");
+                self.terminate_connection()
+
+            }
             ErrorKind::ErrorReason(err_type, id, reason) => {
                 self.send_error(err_type, id, reason)
             }
@@ -180,4 +209,14 @@ impl Handler for ConnectionHandler {
             _ => Ok(())
         }
     }
+
+    fn on_close(&mut self, _code: CloseCode, _reason: &str) {
+        let state = self.info.lock().unwrap().state.clone();
+        if state != ConnectionState::Disconnected {
+            trace!("Client disconnected.  Closing connection");
+            self.terminate_connection().ok();
+        }
+    }
+
+
 }

@@ -57,7 +57,7 @@ impl ConnectionHandler{
         }
     }
 
-    pub fn handle_call(&mut self, request_id: ID, options: CallOptions, procedure: URI, args: Option<List>, kwargs: Option<Dict>) -> WampResult<()> {
+    pub fn handle_call(&mut self, request_id: ID, _options: CallOptions, procedure: URI, args: Option<List>, kwargs: Option<Dict>) -> WampResult<()> {
          debug!("Responding to call message (id: {}, procedure: {})", request_id, procedure.uri);
          match self.realm {
              Some(ref realm) => {
@@ -76,7 +76,7 @@ impl ConnectionHandler{
                  } else {
                      Some(procedure)
                  };
-                 let invocation_message = Message::Invocation(procedure_id, invocation_id, details, args, kwargs);
+                 let invocation_message = Message::Invocation(invocation_id, procedure_id, details, args, kwargs);
                  try!(send_message(registrant, &invocation_message));
 
 

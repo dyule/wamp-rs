@@ -1,6 +1,7 @@
 use URI;
 use std::fmt;
 use serde;
+use super::{List, Dict};
 
 #[derive(Hash, Eq, PartialEq, Debug)]
 pub enum Reason {
@@ -26,6 +27,12 @@ pub enum Reason {
     CustomReason(URI)
 }
 
+#[derive(Debug)]
+pub struct CallError {
+    reason: Reason,
+    args: Option<List>,
+    kwargs: Option<Dict>
+}
 
 #[derive(Hash, Eq, PartialEq, Debug)]
 pub enum ErrorType {
@@ -36,6 +43,36 @@ pub enum ErrorType {
     Unregister,
     Invocation,
     Call,
+}
+
+impl CallError {
+    #[inline]
+    pub fn new(reason: Reason, args: Option<List>, kwargs: Option<Dict>) -> CallError {
+        CallError {
+            reason: reason,
+            args: args,
+            kwargs: kwargs
+        }
+    }
+
+    pub fn to_tuple(self) -> (Reason, Option<List>, Option<Dict>) {
+        (self.reason, self.args, self.kwargs)
+    }
+
+    #[inline]
+    pub fn get_reason(&self) -> &Reason {
+        &self.reason
+    }
+
+    #[inline]
+    pub fn get_args(&self) -> &Option<List> {
+        &self.args
+    }
+
+    #[inline]
+    pub fn get_kwargs(&self) -> &Option<Dict> {
+        &self.kwargs
+    }
 }
 
 struct ErrorTypeVisitor;

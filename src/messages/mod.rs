@@ -351,8 +351,13 @@ mod test {
         InvocationDetails,
         ResultDetails
     };
+    use utils::StructMapWriter;
     use std::collections::{HashMap};
     use serde_json;
+    use rmp_serde::Deserializer as RMPDeserializer;
+    use rmp_serde::Serializer;
+    use serde::{Deserialize, Serialize};
+    use std::io::Cursor;
 
     macro_rules! two_way_test {
         ($message: expr, $s: expr) => (
@@ -360,6 +365,11 @@ mod test {
             let message = $message;
             assert_eq!(serde_json::to_string(&message).unwrap(), $s);
             assert_eq!(serde_json::from_str::<Message>($s).unwrap(), message);
+            let mut buf: Vec<u8> = Vec::new();
+            message.serialize(&mut Serializer::with(&mut buf, StructMapWriter)).unwrap();
+            let mut de = RMPDeserializer::new(Cursor::new(buf));
+            let new_message: Message = Deserialize::deserialize::<RMPDeserializer<Cursor<Vec<u8>>>>(&mut de).unwrap();
+            assert_eq!(new_message, message);
         }
         );
     }
