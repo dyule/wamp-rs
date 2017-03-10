@@ -117,7 +117,7 @@ impl fmt::Display for Reason {
 -------------------------*/
 
 impl serde::Serialize for Reason {
-    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::Serializer,
     {
         serializer.serialize_str(self.get_string())
@@ -125,7 +125,7 @@ impl serde::Serialize for Reason {
 }
 
 impl serde::Deserialize for Reason {
-    fn deserialize<D>(deserializer: &mut D) -> Result<Reason, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Reason, D::Error>
         where D: serde::Deserializer,
     {
         deserializer.deserialize(ReasonVisitor)
@@ -135,8 +135,12 @@ impl serde::Deserialize for Reason {
 impl serde::de::Visitor for ReasonVisitor {
     type Value = Reason;
 
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("error reason uri")
+    }
+
     #[inline]
-    fn visit_str<E>(&mut self, value: &str) -> Result<Reason, E>
+    fn visit_str<E>(self, value: &str) -> Result<Reason, E>
         where E: serde::de::Error,
     {
         match value {
@@ -171,7 +175,7 @@ impl serde::de::Visitor for ReasonVisitor {
 -------------------------*/
 
 impl serde::Serialize for ErrorType {
-    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::Serializer,
     {
         let ser_int = match *self {
@@ -188,7 +192,7 @@ impl serde::Serialize for ErrorType {
 }
 
 impl serde::Deserialize for ErrorType {
-    fn deserialize<D>(deserializer: &mut D) -> Result<ErrorType, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<ErrorType, D::Error>
         where D: serde::Deserializer,
     {
         deserializer.deserialize(ErrorTypeVisitor)
@@ -198,8 +202,12 @@ impl serde::Deserialize for ErrorType {
 impl serde::de::Visitor for ErrorTypeVisitor {
     type Value = ErrorType;
 
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("Integer representing an error type")
+    }
+
     #[inline]
-    fn visit_u64<E>(&mut self, value: u64) -> Result<ErrorType, E>
+    fn visit_u64<E>(self, value: u64) -> Result<ErrorType, E>
         where E: serde::de::Error,
     {
         match value {

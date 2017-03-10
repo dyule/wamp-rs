@@ -17,11 +17,4 @@ To include in your project, place the following in your `Cargo.toml`
 wamp = "0.1"
 ```
 
-# Contributing
-
-WAMP-RS uses [serde-rs](https://github.com/serde-rs/serde).  For better error messages, compile using rust nightly, and enable the nightly features:
-
-```
-rustup override set nightly
-cargo build --no-default-features --features nightly
-```
+WAMP-RS uses [serde-rs](https://github.com/serde-rs/serde), which requires Rust 1.15 or greater.

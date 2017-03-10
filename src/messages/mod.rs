@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde;
 pub use messages::types::*;
 use ::ID;
@@ -56,7 +58,7 @@ macro_rules! serialize_with_args {
 }
 
 impl serde::Serialize for Message {
-    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::Serializer,
     {
         match *self {
@@ -125,7 +127,7 @@ impl serde::Serialize for Message {
 }
 
 impl serde::Deserialize for Message {
-    fn deserialize<D>(deserializer: &mut D) -> Result<Message, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Message, D::Error>
         where D: serde::Deserializer {
             deserializer.deserialize(MessageVisitor)
         }
@@ -139,28 +141,24 @@ impl MessageVisitor {
     fn visit_hello<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let uri = try_or!(visitor.visit(), "Hello message ended before realm uri");
         let details = try_or!(visitor.visit(), "Hello message ended before details dict");
-        try!(visitor.end());
         Ok( Message::Hello(uri, details))
     }
 
     fn visit_welcome<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let session = try_or!(visitor.visit(), "Welcome message ended before session id");
         let details = try_or!(visitor.visit(), "Welcome message ended before details dict");
-        try!(visitor.end());
         Ok( Message::Welcome(session, details))
     }
 
     fn visit_abort<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let details = try_or!(visitor.visit(), "Abort message ended before details dict");
         let reason = try_or!(visitor.visit(), "Abort message ended before reason uri");
-        try!(visitor.end());
         Ok( Message::Abort(details, reason))
     }
 
     fn visit_goodbye<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let details = try_or!(visitor.visit(), "Goodbye message ended before details dict");
         let reason = try_or!(visitor.visit(), "Goodbye message ended before reason uri");
-        try!(visitor.end());
         Ok( Message::Goodbye(details, reason))
     }
 
@@ -171,7 +169,6 @@ impl MessageVisitor {
         let reason = try_or!(visitor.visit(), "Error message ended before reason uri");
         let args = try!(visitor.visit());
         let kwargs = try!(visitor.visit());
-        try!(visitor.end());
         Ok( Message::Error(message_type, id, details, reason, args, kwargs))
 
     }
@@ -180,27 +177,23 @@ impl MessageVisitor {
         let request = try_or!(visitor.visit(), "Subscribe message ended before request id");
         let options = try_or!(visitor.visit(), "Subscribe message ended before options dict");
         let topic = try_or!(visitor.visit(), "Subscribe message ended before topic uri");
-        try!(visitor.end());
         Ok( Message::Subscribe(request, options, topic) )
     }
 
     fn visit_subscribed<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let request = try_or!(visitor.visit(), "Subscribed message ended before request id");
         let subscription = try_or!(visitor.visit(), "Subscribed message ended before subscription id");
-        try!(visitor.end());
         Ok(Message::Subscribed(request, subscription))
     }
 
     fn visit_unsubscribe<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let request = try_or!(visitor.visit(), "Unsubscribe message ended before request id");
         let subscription = try_or!(visitor.visit(), "Unsubscribe message ended before subscription id");
-        try!(visitor.end());
         Ok(Message::Unsubscribe(request, subscription))
     }
 
     fn visit_unsubscribed<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let request = try_or!(visitor.visit(), "Unsubscribed message ended before request id");
-        try!(visitor.end());
         Ok(Message::Unsubscribed(request))
     }
 
@@ -210,14 +203,12 @@ impl MessageVisitor {
         let topic = try_or!(visitor.visit(), "Publish message ended before topic uri");
         let args = try!(visitor.visit());
         let kwargs = try!(visitor.visit());
-        try!(visitor.end());
         Ok(Message::Publish(id, details, topic, args, kwargs))
     }
 
     fn visit_published<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let request = try_or!(visitor.visit(), "Published message ended before request id");
         let publication = try_or!(visitor.visit(), "Published message ended before publication id");
-        try!(visitor.end());
         Ok(Message::Published(request, publication))
     }
 
@@ -227,7 +218,6 @@ impl MessageVisitor {
         let details = try_or!(visitor.visit(), "Event message ended before details dict");
         let args = try!(visitor.visit());
         let kwargs = try!(visitor.visit());
-        try!(visitor.end());
         Ok(Message::Event(subscription_id, publication_id, details, args, kwargs))
     }
 
@@ -235,27 +225,23 @@ impl MessageVisitor {
         let request = try_or!(visitor.visit(), "Register message ended before request id");
         let options = try_or!(visitor.visit(), "Register message ended before request options");
         let procedure = try_or!(visitor.visit(), "Register message ended before procedure");
-        try!(visitor.end());
         Ok(Message::Register(request, options, procedure))
     }
 
     fn visit_registered<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let request = try_or!(visitor.visit(), "Registered message ended before request id");
         let registration_id = try_or!(visitor.visit(), "Registered message ended before registration id");
-        try!(visitor.end());
         Ok(Message::Registered(request, registration_id))
     }
 
     fn visit_unregister<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let request = try_or!(visitor.visit(), "Registered message ended before request id");
         let registration_id = try_or!(visitor.visit(), "Registered message ended before registration id");
-        try!(visitor.end());
         Ok(Message::Unregister(request, registration_id))
     }
 
     fn visit_unregistered<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let request = try_or!(visitor.visit(), "Registered message ended before request id");
-        try!(visitor.end());
         Ok(Message::Unregistered(request))
     }
 
@@ -265,7 +251,6 @@ impl MessageVisitor {
         let topic = try_or!(visitor.visit(), "Call message ended before procedure uri");
         let args = try!(visitor.visit());
         let kwargs = try!(visitor.visit());
-        try!(visitor.end());
         Ok(Message::Call(id, options, topic, args, kwargs))
     }
 
@@ -275,7 +260,6 @@ impl MessageVisitor {
         let details = try_or!(visitor.visit(), "Invocation message ended before details dict");
         let args = try!(visitor.visit());
         let kwargs = try!(visitor.visit());
-        try!(visitor.end());
         Ok(Message::Invocation(id, registration_id, details, args, kwargs))
     }
 
@@ -284,7 +268,6 @@ impl MessageVisitor {
         let options = try_or!(visitor.visit(), "Yield message ended before options dict");
         let args = try!(visitor.visit());
         let kwargs = try!(visitor.visit());
-        try!(visitor.end());
         Ok(Message::Yield(id, options, args, kwargs))
     }
 
@@ -293,7 +276,6 @@ impl MessageVisitor {
         let details = try_or!(visitor.visit(), "Result message ended before details dict");
         let args = try!(visitor.visit());
         let kwargs = try!(visitor.visit());
-        try!(visitor.end());
         Ok(Message::Result(id, details, args, kwargs))
     }
 }
@@ -301,7 +283,11 @@ impl MessageVisitor {
 impl serde::de::Visitor for MessageVisitor {
     type Value = Message;
 
-    fn visit_seq<V>(&mut self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a message")
+    }
+
+    fn visit_seq<V>(self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
         let message_type:u64 = try_or!(visitor.visit(), "No message type found");
         match message_type {
             1  => self.visit_hello(visitor),
@@ -357,7 +343,7 @@ mod test {
     use rmp_serde::Deserializer as RMPDeserializer;
     use rmp_serde::Serializer;
     use serde::{Deserialize, Serialize};
-    use std::io::Cursor;
+
 
     macro_rules! two_way_test {
         ($message: expr, $s: expr) => (
@@ -367,8 +353,8 @@ mod test {
             assert_eq!(serde_json::from_str::<Message>($s).unwrap(), message);
             let mut buf: Vec<u8> = Vec::new();
             message.serialize(&mut Serializer::with(&mut buf, StructMapWriter)).unwrap();
-            let mut de = RMPDeserializer::new(Cursor::new(buf));
-            let new_message: Message = Deserialize::deserialize::<RMPDeserializer<Cursor<Vec<u8>>>>(&mut de).unwrap();
+            let mut de = RMPDeserializer::new(&buf[..]);
+            let new_message: Message = Deserialize::deserialize(&mut de).unwrap();
             assert_eq!(new_message, message);
         }
         );

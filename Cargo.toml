@@ -2,32 +2,26 @@
 name = "wamp"
 version = "0.1.0"
 authors = ["Daniel Yule <yule@cs.dal.ca>"]
-build = "build.rs"
 license = "MIT"
 homepage = "https://github.com/dyule/wamp-rs"
 repository = "https://github.com/dyule/wamp-rs"
+description = "A WAMP client and router implenting the basic WAMP profile"
+keywords = ["rpc", "pubsub", "wamp"]
 
 [lib]
 name = "wamp"
 path = "src/lib.rs"
 
-[features]
-default = ["serde_codegen"]
-nightly = ["serde_macros"]
-
-[build-dependencies]
-serde_codegen = { version = "0.7", optional = true }
-syntex = "0.39"
 
 [dependencies]
-serde = "0.7"
-serde_json = {version="0.7"}
-serde_macros = { version = "0.7", optional = true }
-url = "*"
+serde = "0.9"
+serde_json = "0.9"
+serde_derive = "0.9"
+url = "1.4"
 log = "0.3"
 env_logger = "0.3"
-rmp = {version = "0.7", path="../msgpack-rust/rmp"}
-rmp-serde = {version = "0.9", path="../msgpack-rust/rmp-serde"}
-ws = "^0.5"
+rmp = "0.8"
+rmp-serde = "0.12"
+ws = "0.6"
 rand = "0.3"
 eventual = "0.1.7"

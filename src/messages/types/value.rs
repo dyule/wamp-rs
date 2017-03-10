@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use CallResult;
 use serde;
 use super::{Reason, CallError};
+use std::fmt;
 
 pub type Dict = HashMap<String, Value>;
 pub type List = Vec<Value>;
@@ -160,34 +161,38 @@ impl serde::de::Visitor for ValueVisitor {
     type Value = Value;
 
 
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("JSON value")
+    }
+
     #[inline]
-    fn visit_str<E>(&mut self, value: &str) -> Result<Value, E>
+    fn visit_str<E>(self, value: &str) -> Result<Value, E>
         where E: serde::de::Error {
             Ok(Value::String(value.to_string()))
     }
 
 
     #[inline]
-    fn visit_i64<E>(&mut self, value: i64) -> Result<Value, E>
+    fn visit_i64<E>(self, value: i64) -> Result<Value, E>
     where E: serde::de::Error {
         Ok(Value::Integer(value))
     }
 
     #[inline]
-    fn visit_u64<E>(&mut self, value: u64) -> Result<Value, E>
+    fn visit_u64<E>(self, value: u64) -> Result<Value, E>
     where E: serde::de::Error {
         Ok(Value::Integer(value as i64))
     }
 
     #[inline]
-    fn visit_bool<E>(&mut self, value: bool) -> Result<Value, E>
+    fn visit_bool<E>(self, value: bool) -> Result<Value, E>
     where E: serde::de::Error {
         Ok(Value::Boolean(value))
     }
 
 
     #[inline]
-    fn visit_map<Visitor>(&mut self, mut visitor: Visitor) -> Result<Value, Visitor::Error>
+    fn visit_map<Visitor>(self, mut visitor: Visitor) -> Result<Value, Visitor::Error>
     where Visitor: serde::de::MapVisitor,
     {
        let mut values = HashMap::with_capacity(visitor.size_hint().0);
@@ -196,13 +201,13 @@ impl serde::de::Visitor for ValueVisitor {
            values.insert(key, value);
        }
 
-       try!(visitor.end());
+
 
        Ok(Value::Dict(values))
    }
 
    #[inline]
-    fn visit_seq<Visitor>(&mut self, mut visitor: Visitor) -> Result<Value, Visitor::Error>
+    fn visit_seq<Visitor>(self, mut visitor: Visitor) -> Result<Value, Visitor::Error>
         where Visitor: serde::de::SeqVisitor,
     {
         let mut values = Vec::with_capacity(visitor.size_hint().0);;
@@ -211,7 +216,7 @@ impl serde::de::Visitor for ValueVisitor {
             values.push(value);
         }
 
-        try!(visitor.end());
+
 
         Ok(Value::List(values))
     }
@@ -221,21 +226,21 @@ impl serde::de::Visitor for ValueVisitor {
          Value
 -------------------------*/
 impl serde::Serialize for Value {
-    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::ser::Serializer,
     {
-        match *self {
-            Value::Dict(ref dict) => dict.serialize(serializer),
-            Value::String(ref s) => serializer.serialize_str(s),
-            Value::Integer(i) => serializer.serialize_i64(i),
-            Value::List(ref list) => list.serialize(serializer),
-            Value::Boolean(b) => serializer.serialize_bool(b)
+        match self {
+            &Value::Dict(ref dict) => dict.serialize(serializer),
+            &Value::String(ref s) => serializer.serialize_str(s),
+            &Value::Integer(i) => serializer.serialize_i64(i),
+            &Value::List(ref list) => list.serialize(serializer),
+            &Value::Boolean(b) => serializer.serialize_bool(b)
         }
     }
 }
 
 impl serde::Deserialize for Value {
-    fn deserialize<D>(deserializer: &mut D) -> Result<Value, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Value, D::Error>
         where D: serde::Deserializer,
     {
         deserializer.deserialize(ValueVisitor)
@@ -247,7 +252,7 @@ impl serde::Deserialize for Value {
 -------------------------*/
 
 impl serde::Serialize for URI {
-    fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::ser::Serializer,
     {
         serializer.serialize_str(&self.uri)
@@ -255,7 +260,7 @@ impl serde::Serialize for URI {
 }
 
 impl serde::Deserialize for URI {
-    fn deserialize<D>(deserializer: &mut D) -> Result<URI, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<URI, D::Error>
         where D: serde::Deserializer,
     {
         deserializer.deserialize(URIVisitor)
@@ -265,8 +270,11 @@ impl serde::Deserialize for URI {
 impl serde::de::Visitor for URIVisitor {
     type Value = URI;
 
+    fn expecting(&self,  formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("URI")
+    }
     #[inline]
-    fn visit_str<E>(&mut self, value: &str) -> Result<URI, E>
+    fn visit_str<E>(self, value: &str) -> Result<URI, E>
         where E: serde::de::Error,
     {
         Ok(URI {
