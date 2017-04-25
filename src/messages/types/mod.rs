@@ -1,3 +1,4 @@
+
 // All this is necessary because Serde decided that the best way
 // to serialize an empty struct was as a null value, and the best way
 // to deserialize it was as an empty list.  So instead we serialize it as a map.
@@ -19,14 +20,14 @@ macro_rules! serialize_empty_workaround {
             }
         }
 
-        impl serde::de::Deserialize for $name {
+        impl <'de> serde::de::Deserialize<'de> for $name {
 
 
             fn deserialize<D>(deserializer:  D) -> Result<$name, D::Error> where
-             D: serde::de::Deserializer {
+             D: serde::de::Deserializer<'de> {
                 {
                     struct Visitor;
-                    impl serde::de::Visitor for Visitor {
+                    impl <'de> serde::de::Visitor<'de> for Visitor {
                         type Value = $name;
 
                         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -39,8 +40,8 @@ macro_rules! serialize_empty_workaround {
                             Ok($obj)
                         }
                         #[inline]
-                        fn visit_map<V>(self,  _visitor: V) -> Result<$name,V::Error>
-                         where V: serde::de::MapVisitor {
+                        fn visit_map<A>(self,  _visitor: A) -> Result<$name,A::Error>
+                         where A: serde::de::MapAccess<'de> {
                             self.visit_unit()
                         }
                     }
@@ -50,6 +51,7 @@ macro_rules! serialize_empty_workaround {
         }
     );
 }
+
 
 
 mod options;
@@ -162,15 +164,15 @@ impl serde::Serialize for MatchingPolicy {
     }
 }
 
-impl serde::Deserialize for MatchingPolicy {
+impl <'de> serde::Deserialize<'de> for MatchingPolicy {
     fn deserialize<D>(deserializer: D) -> Result<MatchingPolicy, D::Error>
-        where D: serde::Deserializer,
+        where D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize(MatchingPolicyVisitor)
+        deserializer.deserialize_str(MatchingPolicyVisitor)
     }
 }
 
-impl serde::de::Visitor for MatchingPolicyVisitor {
+impl <'de> serde::de::Visitor<'de> for MatchingPolicyVisitor {
     type Value = MatchingPolicy;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -205,15 +207,15 @@ impl serde::Serialize for InvocationPolicy {
     }
 }
 
-impl serde::Deserialize for InvocationPolicy {
+impl <'de> serde::Deserialize<'de> for InvocationPolicy {
     fn deserialize<D>(deserializer: D) -> Result<InvocationPolicy, D::Error>
-        where D: serde::Deserializer,
+        where D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize(InvocationPolicyVisitor)
+        deserializer.deserialize_str(InvocationPolicyVisitor)
     }
 }
 
-impl serde::de::Visitor for InvocationPolicyVisitor {
+impl <'de> serde::de::Visitor<'de> for InvocationPolicyVisitor {
     type Value = InvocationPolicy;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

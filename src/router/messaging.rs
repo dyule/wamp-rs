@@ -35,12 +35,10 @@ fn send_message_json(sender: &Sender, message: &Message) -> WSResult<()> {
 }
 
 fn send_message_msgpack(sender: &Sender, message: &Message) -> WSResult<()> {
-
     // Send the message
     let mut buf: Vec<u8> = Vec::new();
     message.serialize(&mut Serializer::with(&mut buf, StructMapWriter)).unwrap();
     sender.send(WSMessage::Binary(buf))
-
 }
 
 impl ConnectionHandler {

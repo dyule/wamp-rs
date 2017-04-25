@@ -124,15 +124,15 @@ impl serde::Serialize for Reason {
     }
 }
 
-impl serde::Deserialize for Reason {
+impl <'de> serde::Deserialize<'de> for Reason {
     fn deserialize<D>(deserializer: D) -> Result<Reason, D::Error>
-        where D: serde::Deserializer,
+        where D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize(ReasonVisitor)
+        deserializer.deserialize_str(ReasonVisitor)
     }
 }
 
-impl serde::de::Visitor for ReasonVisitor {
+impl <'de> serde::de::Visitor<'de> for ReasonVisitor {
     type Value = Reason;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -191,15 +191,15 @@ impl serde::Serialize for ErrorType {
     }
 }
 
-impl serde::Deserialize for ErrorType {
+impl <'de> serde::Deserialize<'de> for ErrorType {
     fn deserialize<D>(deserializer: D) -> Result<ErrorType, D::Error>
-        where D: serde::Deserializer,
+        where D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize(ErrorTypeVisitor)
+        deserializer.deserialize_u64(ErrorTypeVisitor)
     }
 }
 
-impl serde::de::Visitor for ErrorTypeVisitor {
+impl <'de> serde::de::Visitor<'de> for ErrorTypeVisitor {
     type Value = ErrorType;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

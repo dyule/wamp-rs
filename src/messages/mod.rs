@@ -126,10 +126,10 @@ impl serde::Serialize for Message {
     }
 }
 
-impl serde::Deserialize for Message {
+impl <'de> serde::Deserialize<'de> for Message {
     fn deserialize<D>(deserializer: D) -> Result<Message, D::Error>
-        where D: serde::Deserializer {
-            deserializer.deserialize(MessageVisitor)
+        where D: serde::Deserializer<'de> {
+            deserializer.deserialize_any(MessageVisitor)
         }
 }
 
@@ -138,157 +138,157 @@ struct MessageVisitor;
 
 
 impl MessageVisitor {
-    fn visit_hello<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let uri = try_or!(visitor.visit(), "Hello message ended before realm uri");
-        let details = try_or!(visitor.visit(), "Hello message ended before details dict");
+    fn visit_hello<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let uri = try_or!(visitor.next_element(), "Hello message ended before realm uri");
+        let details = try_or!(visitor.next_element(), "Hello message ended before details dict");
         Ok( Message::Hello(uri, details))
     }
 
-    fn visit_welcome<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let session = try_or!(visitor.visit(), "Welcome message ended before session id");
-        let details = try_or!(visitor.visit(), "Welcome message ended before details dict");
+    fn visit_welcome<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let session = try_or!(visitor.next_element(), "Welcome message ended before session id");
+        let details = try_or!(visitor.next_element(), "Welcome message ended before details dict");
         Ok( Message::Welcome(session, details))
     }
 
-    fn visit_abort<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let details = try_or!(visitor.visit(), "Abort message ended before details dict");
-        let reason = try_or!(visitor.visit(), "Abort message ended before reason uri");
+    fn visit_abort<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let details = try_or!(visitor.next_element(), "Abort message ended before details dict");
+        let reason = try_or!(visitor.next_element(), "Abort message ended before reason uri");
         Ok( Message::Abort(details, reason))
     }
 
-    fn visit_goodbye<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let details = try_or!(visitor.visit(), "Goodbye message ended before details dict");
-        let reason = try_or!(visitor.visit(), "Goodbye message ended before reason uri");
+    fn visit_goodbye<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let details = try_or!(visitor.next_element(), "Goodbye message ended before details dict");
+        let reason = try_or!(visitor.next_element(), "Goodbye message ended before reason uri");
         Ok( Message::Goodbye(details, reason))
     }
 
-    fn visit_error<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let message_type = try_or!(visitor.visit(), "Error message ended before message type");
-        let id = try_or!(visitor.visit(), "Error message ended before session id");
-        let details = try_or!(visitor.visit(), "Error message ended before details dict");
-        let reason = try_or!(visitor.visit(), "Error message ended before reason uri");
-        let args = try!(visitor.visit());
-        let kwargs = try!(visitor.visit());
+    fn visit_error<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let message_type = try_or!(visitor.next_element(), "Error message ended before message type");
+        let id = try_or!(visitor.next_element(), "Error message ended before session id");
+        let details = try_or!(visitor.next_element(), "Error message ended before details dict");
+        let reason = try_or!(visitor.next_element(), "Error message ended before reason uri");
+        let args = try!(visitor.next_element());
+        let kwargs = try!(visitor.next_element());
         Ok( Message::Error(message_type, id, details, reason, args, kwargs))
 
     }
 
-    fn visit_subscribe<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let request = try_or!(visitor.visit(), "Subscribe message ended before request id");
-        let options = try_or!(visitor.visit(), "Subscribe message ended before options dict");
-        let topic = try_or!(visitor.visit(), "Subscribe message ended before topic uri");
+    fn visit_subscribe<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let request = try_or!(visitor.next_element(), "Subscribe message ended before request id");
+        let options = try_or!(visitor.next_element(), "Subscribe message ended before options dict");
+        let topic = try_or!(visitor.next_element(), "Subscribe message ended before topic uri");
         Ok( Message::Subscribe(request, options, topic) )
     }
 
-    fn visit_subscribed<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let request = try_or!(visitor.visit(), "Subscribed message ended before request id");
-        let subscription = try_or!(visitor.visit(), "Subscribed message ended before subscription id");
+    fn visit_subscribed<'de, V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let request = try_or!(visitor.next_element(), "Subscribed message ended before request id");
+        let subscription = try_or!(visitor.next_element(), "Subscribed message ended before subscription id");
         Ok(Message::Subscribed(request, subscription))
     }
 
-    fn visit_unsubscribe<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let request = try_or!(visitor.visit(), "Unsubscribe message ended before request id");
-        let subscription = try_or!(visitor.visit(), "Unsubscribe message ended before subscription id");
+    fn visit_unsubscribe<'de, V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let request = try_or!(visitor.next_element(), "Unsubscribe message ended before request id");
+        let subscription = try_or!(visitor.next_element(), "Unsubscribe message ended before subscription id");
         Ok(Message::Unsubscribe(request, subscription))
     }
 
-    fn visit_unsubscribed<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let request = try_or!(visitor.visit(), "Unsubscribed message ended before request id");
+    fn visit_unsubscribed<'de, V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let request = try_or!(visitor.next_element(), "Unsubscribed message ended before request id");
         Ok(Message::Unsubscribed(request))
     }
 
-    fn visit_publish<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let id = try_or!(visitor.visit(), "Publish message ended before session id");
-        let details = try_or!(visitor.visit(), "Publish message ended before details dict");
-        let topic = try_or!(visitor.visit(), "Publish message ended before topic uri");
-        let args = try!(visitor.visit());
-        let kwargs = try!(visitor.visit());
+    fn visit_publish<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let id = try_or!(visitor.next_element(), "Publish message ended before session id");
+        let details = try_or!(visitor.next_element(), "Publish message ended before details dict");
+        let topic = try_or!(visitor.next_element(), "Publish message ended before topic uri");
+        let args = try!(visitor.next_element());
+        let kwargs = try!(visitor.next_element());
         Ok(Message::Publish(id, details, topic, args, kwargs))
     }
 
-    fn visit_published<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let request = try_or!(visitor.visit(), "Published message ended before request id");
-        let publication = try_or!(visitor.visit(), "Published message ended before publication id");
+    fn visit_published<'de, V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let request = try_or!(visitor.next_element(), "Published message ended before request id");
+        let publication = try_or!(visitor.next_element(), "Published message ended before publication id");
         Ok(Message::Published(request, publication))
     }
 
-    fn visit_event<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let subscription_id = try_or!(visitor.visit(), "Event message ended before session subscription id");
-        let publication_id = try_or!(visitor.visit(), "Event message ended before publication id");
-        let details = try_or!(visitor.visit(), "Event message ended before details dict");
-        let args = try!(visitor.visit());
-        let kwargs = try!(visitor.visit());
+    fn visit_event<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let subscription_id = try_or!(visitor.next_element(), "Event message ended before session subscription id");
+        let publication_id = try_or!(visitor.next_element(), "Event message ended before publication id");
+        let details = try_or!(visitor.next_element(), "Event message ended before details dict");
+        let args = try!(visitor.next_element());
+        let kwargs = try!(visitor.next_element());
         Ok(Message::Event(subscription_id, publication_id, details, args, kwargs))
     }
 
-    fn visit_register<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let request = try_or!(visitor.visit(), "Register message ended before request id");
-        let options = try_or!(visitor.visit(), "Register message ended before request options");
-        let procedure = try_or!(visitor.visit(), "Register message ended before procedure");
+    fn visit_register<'de, V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let request = try_or!(visitor.next_element(), "Register message ended before request id");
+        let options = try_or!(visitor.next_element(), "Register message ended before request options");
+        let procedure = try_or!(visitor.next_element(), "Register message ended before procedure");
         Ok(Message::Register(request, options, procedure))
     }
 
-    fn visit_registered<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let request = try_or!(visitor.visit(), "Registered message ended before request id");
-        let registration_id = try_or!(visitor.visit(), "Registered message ended before registration id");
+    fn visit_registered<'de, V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let request = try_or!(visitor.next_element(), "Registered message ended before request id");
+        let registration_id = try_or!(visitor.next_element(), "Registered message ended before registration id");
         Ok(Message::Registered(request, registration_id))
     }
 
-    fn visit_unregister<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let request = try_or!(visitor.visit(), "Registered message ended before request id");
-        let registration_id = try_or!(visitor.visit(), "Registered message ended before registration id");
+    fn visit_unregister<'de, V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let request = try_or!(visitor.next_element(), "Registered message ended before request id");
+        let registration_id = try_or!(visitor.next_element(), "Registered message ended before registration id");
         Ok(Message::Unregister(request, registration_id))
     }
 
-    fn visit_unregistered<V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let request = try_or!(visitor.visit(), "Registered message ended before request id");
+    fn visit_unregistered<'de, V>(&self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let request = try_or!(visitor.next_element(), "Registered message ended before request id");
         Ok(Message::Unregistered(request))
     }
 
-    fn visit_call<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let id = try_or!(visitor.visit(), "Call message ended before session id");
-        let options = try_or!(visitor.visit(), "Call message ended before options dict");
-        let topic = try_or!(visitor.visit(), "Call message ended before procedure uri");
-        let args = try!(visitor.visit());
-        let kwargs = try!(visitor.visit());
+    fn visit_call<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let id = try_or!(visitor.next_element(), "Call message ended before session id");
+        let options = try_or!(visitor.next_element(), "Call message ended before options dict");
+        let topic = try_or!(visitor.next_element(), "Call message ended before procedure uri");
+        let args = try!(visitor.next_element());
+        let kwargs = try!(visitor.next_element());
         Ok(Message::Call(id, options, topic, args, kwargs))
     }
 
-    fn visit_invocation<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let id = try_or!(visitor.visit(), "Invocation message ended before session id");
-        let registration_id = try_or!(visitor.visit(), "Invocation message ended before registration id");
-        let details = try_or!(visitor.visit(), "Invocation message ended before details dict");
-        let args = try!(visitor.visit());
-        let kwargs = try!(visitor.visit());
+    fn visit_invocation<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let id = try_or!(visitor.next_element(), "Invocation message ended before session id");
+        let registration_id = try_or!(visitor.next_element(), "Invocation message ended before registration id");
+        let details = try_or!(visitor.next_element(), "Invocation message ended before details dict");
+        let args = try!(visitor.next_element());
+        let kwargs = try!(visitor.next_element());
         Ok(Message::Invocation(id, registration_id, details, args, kwargs))
     }
 
-    fn visit_yield<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let id = try_or!(visitor.visit(), "Yield message ended before session id");
-        let options = try_or!(visitor.visit(), "Yield message ended before options dict");
-        let args = try!(visitor.visit());
-        let kwargs = try!(visitor.visit());
+    fn visit_yield<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let id = try_or!(visitor.next_element(), "Yield message ended before session id");
+        let options = try_or!(visitor.next_element(), "Yield message ended before options dict");
+        let args = try!(visitor.next_element());
+        let kwargs = try!(visitor.next_element());
         Ok(Message::Yield(id, options, args, kwargs))
     }
 
-    fn visit_result<V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let id = try_or!(visitor.visit(), "Result message ended before session id");
-        let details = try_or!(visitor.visit(), "Result message ended before details dict");
-        let args = try!(visitor.visit());
-        let kwargs = try!(visitor.visit());
+    fn visit_result<'de, V>(&self,  mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let id = try_or!(visitor.next_element(), "Result message ended before session id");
+        let details = try_or!(visitor.next_element(), "Result message ended before details dict");
+        let args = try!(visitor.next_element());
+        let kwargs = try!(visitor.next_element());
         Ok(Message::Result(id, details, args, kwargs))
     }
 }
 
-impl serde::de::Visitor for MessageVisitor {
+impl <'de> serde::de::Visitor<'de> for MessageVisitor {
     type Value = Message;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("a message")
     }
 
-    fn visit_seq<V>(self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqVisitor {
-        let message_type:u64 = try_or!(visitor.visit(), "No message type found");
+    fn visit_seq<V>(self, mut visitor:V) -> Result<Message, V::Error> where V: serde::de::SeqAccess<'de> {
+        let message_type:u64 = try_or!(visitor.next_element(), "No message type found");
         match message_type {
             1  => self.visit_hello(visitor),
             2  => self.visit_welcome(visitor),
