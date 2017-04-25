@@ -157,7 +157,7 @@ impl Value {
 }
 
 // XXX Right now there is no way to tell the difference between a URI and a string, or an ID and an Integer
-impl serde::de::Visitor for ValueVisitor {
+impl <'de> serde::de::Visitor<'de> for ValueVisitor {
     type Value = Value;
 
 
@@ -193,11 +193,14 @@ impl serde::de::Visitor for ValueVisitor {
 
     #[inline]
     fn visit_map<Visitor>(self, mut visitor: Visitor) -> Result<Value, Visitor::Error>
-    where Visitor: serde::de::MapVisitor,
+    where Visitor: serde::de::MapAccess<'de>,
     {
-       let mut values = HashMap::with_capacity(visitor.size_hint().0);
+       let mut values = HashMap::new();
+       if let Some(size) = visitor.size_hint() {
+           values.reserve(size);
+       }
 
-       while let Some((key, value)) = try!(visitor.visit()) {
+       while let Some((key, value)) = visitor.next_entry()? {
            values.insert(key, value);
        }
 
@@ -208,11 +211,14 @@ impl serde::de::Visitor for ValueVisitor {
 
    #[inline]
     fn visit_seq<Visitor>(self, mut visitor: Visitor) -> Result<Value, Visitor::Error>
-        where Visitor: serde::de::SeqVisitor,
+        where Visitor: serde::de::SeqAccess<'de>,
     {
-        let mut values = Vec::with_capacity(visitor.size_hint().0);;
+        let mut values = Vec::new();
+        if let Some(size) = visitor.size_hint() {
+            values.reserve(size);
+        }
 
-        while let Some(value) = try!(visitor.visit()) {
+        while let Some(value) = visitor.next_element()? {
             values.push(value);
         }
 
@@ -239,11 +245,11 @@ impl serde::Serialize for Value {
     }
 }
 
-impl serde::Deserialize for Value {
+impl <'de> serde::Deserialize<'de> for Value {
     fn deserialize<D>(deserializer: D) -> Result<Value, D::Error>
-        where D: serde::Deserializer,
+        where D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize(ValueVisitor)
+        deserializer.deserialize_any(ValueVisitor)
     }
 }
 
@@ -259,15 +265,15 @@ impl serde::Serialize for URI {
     }
 }
 
-impl serde::Deserialize for URI {
+impl <'de> serde::Deserialize<'de> for URI {
     fn deserialize<D>(deserializer: D) -> Result<URI, D::Error>
-        where D: serde::Deserializer,
+        where D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize(URIVisitor)
+        deserializer.deserialize_str(URIVisitor)
     }
 }
 
-impl serde::de::Visitor for URIVisitor {
+impl <'de> serde::de::Visitor<'de> for URIVisitor {
     type Value = URI;
 
     fn expecting(&self,  formatter: &mut fmt::Formatter) -> fmt::Result {
