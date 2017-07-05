@@ -6,8 +6,6 @@ WAMP-RS is a Rust implementation of the
 
 At present the entire Basic Profile is supported, as well as pattern based subscriptions and registrations from the Advanced Profile.
 
-There is currently no support for secure connections.
-
 For instructions on how to use, please see the [examples](examples) directory.
 
 To include in your project, place the following in your `Cargo.toml`
