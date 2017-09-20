@@ -348,7 +348,7 @@ impl ConnectionHandler {
                     return false;
                 }
             }, ConnectionState:: Connected => {
-                debug!("Recieved a message from the server: {:?}", message);
+                debug!("Received a message from the server: {:?}", message);
                 match message {
                     Message::Subscribed(request_id, subscription_id) => {
                         self.handle_subscribed(info, request_id, subscription_id)
@@ -382,20 +382,20 @@ impl ConnectionHandler {
                         return false;
                     }
                     _ => {
-                        warn!("Recieved unknown message.  Ignoring. {:?}", message)
+                        warn!("Received unknown message.  Ignoring. {:?}", message)
                     }
                 }
             }, ConnectionState::ShuttingDown => {
                 if let Message::Goodbye(_, _) = message {
                     // The router has seen our goodbye message and has responded in kind
-                    info!("Router acknolwedged disconnect");
+                    info!("Router acknowledged disconnect");
                     match info.shutdown_complete.take() {
                         Some(promise) => promise.complete(()),
                         None          => {}
                     }
                     return false;
                 } else {
-                    warn!("Recieved message after shutting down, ignoring: {:?}", message);
+                    warn!("Received message after shutting down, ignoring: {:?}", message);
                     return false;
                 }
             }, ConnectionState::Disconnected => {
@@ -408,7 +408,7 @@ impl ConnectionHandler {
 
     fn handle_subscribed(&self, mut info: MutexGuard<ConnectionInfo>, request_id: ID, subscription_id: ID) {
         // TODO handle errors here
-        info!("Recieved a subscribed notification");
+        info!("Received a subscribed notification");
         match info.subscription_requests.remove(&request_id) {
             Some((promise, callback, topic)) => {
                 debug!("Completing promise");
@@ -418,20 +418,20 @@ impl ConnectionHandler {
                 promise.complete(subscription)
             },
             None => {
-                warn!("Recieved a subscribed notification for a subscription we don't have.  ID: {}", request_id);
+                warn!("Received a subscribed notification for a subscription we don't have.  ID: {}", request_id);
             }
         }
     }
 
     fn handle_subscribe_error(&self, mut info: MutexGuard<ConnectionInfo>, request_id: ID, reason: Reason, args: Option<List>, kwargs: Option<Dict>) {
-        warn!("Recieved an error for a subscription");
+        warn!("Received an error for a subscription");
         match info.subscription_requests.remove(&request_id) {
             Some((promise, _, _)) => {
                 drop(info);
                 promise.fail(CallError::new(reason, args, kwargs));
             },
             None => {
-                warn!("Recieved a an error notification for a request we didn't make.  ID: {}", request_id);
+                warn!("Received a an error notification for a request we didn't make.  ID: {}", request_id);
             }
         }
     }
@@ -444,7 +444,7 @@ impl ConnectionHandler {
                 promise.complete(())
             },
             None => {
-                warn!("Recieved a unsubscribed notification for a subscription we don't have.  ID: {}", request_id);
+                warn!("Received a unsubscribed notification for a subscription we don't have.  ID: {}", request_id);
             }
         }
     }
@@ -457,14 +457,14 @@ impl ConnectionHandler {
                 promise.fail(CallError::new(reason, args, kwargs))
             },
             None => {
-                warn!("Recieved a unsubscribed error for a subscription we don't have.  ID: {}", request_id);
+                warn!("Received a unsubscribed error for a subscription we don't have.  ID: {}", request_id);
             }
         }
     }
 
     fn handle_registered(&self, mut info: MutexGuard<ConnectionInfo>, request_id: ID, registration_id: ID) {
         // TODO handle errors here
-        info!("Recieved a registered notification");
+        info!("Received a registered notification");
         match info.registration_requests.remove(&request_id) {
             Some((promise, callback, procedure)) => {
                 info.registrations.insert(registration_id, callback);
@@ -473,20 +473,20 @@ impl ConnectionHandler {
                 promise.complete(registration)
             },
             None => {
-                warn!("Recieved a registered notification for a registration we don't have.  ID: {}", request_id);
+                warn!("Received a registered notification for a registration we don't have.  ID: {}", request_id);
             }
         }
     }
 
     fn handle_register_error(&self, mut info: MutexGuard<ConnectionInfo>, request_id: ID, reason: Reason, args: Option<List>, kwargs: Option<Dict>) {
-        info!("Recieved a registration error");
+        info!("Received a registration error");
         match info.registration_requests.remove(&request_id) {
             Some((promise, _, _)) => {
                 drop(info);
                 promise.fail(CallError::new(reason, args, kwargs))
             },
             None => {
-                warn!("Recieved a registered error for a registration we don't have.  ID: {}", request_id);
+                warn!("Received a registered error for a registration we don't have.  ID: {}", request_id);
             }
         }
     }
@@ -499,7 +499,7 @@ impl ConnectionHandler {
                 promise.complete(())
             },
             None => {
-                warn!("Recieved a unregistered notification for a registration we don't have.  ID: {}", request_id);
+                warn!("Received a unregistered notification for a registration we don't have.  ID: {}", request_id);
             }
         }
     }
@@ -511,7 +511,7 @@ impl ConnectionHandler {
                 promise.fail(CallError::new(reason, args, kwargs))
             },
             None => {
-                warn!("Recieved a unregistered error for a registration we don't have.  ID: {}", request_id);
+                warn!("Received a unregistered error for a registration we don't have.  ID: {}", request_id);
             }
         }
     }
@@ -522,7 +522,7 @@ impl ConnectionHandler {
                 promise.complete(publication_id);
             },
             None => {
-                warn!("Recieved published notification for a request we weren't tracking: {}", request_id)
+                warn!("Received published notification for a request we weren't tracking: {}", request_id)
             }
         }
     }
@@ -532,7 +532,7 @@ impl ConnectionHandler {
                 promise.fail(CallError::new(reason, args, kwargs))
             },
             None => {
-                warn!("Recieved published error for a publication: {}", request_id)
+                warn!("Received published error for a publication: {}", request_id)
             }
         }
     }
@@ -553,7 +553,7 @@ impl ConnectionHandler {
                 callback(args, kwargs);
             },
             None => {
-                warn!("Recieved an event for a subscription we don't have.  ID: {}", subscription_id);
+                warn!("Received an event for a subscription we don't have.  ID: {}", subscription_id);
             }
         }
     }
@@ -574,7 +574,7 @@ impl ConnectionHandler {
                 }
             },
             None => {
-                warn!("Recieved an invocation for a procedure we don't have.  ID: {}", registration_id);
+                warn!("Received an invocation for a procedure we don't have.  ID: {}", registration_id);
                 return;
             }
         };
@@ -589,7 +589,7 @@ impl ConnectionHandler {
                 promise.complete((args, kwargs));
             },
             None => {
-                warn!("Recieved a result for a call we didn't make.  ID: {}", call_id);
+                warn!("Received a result for a call we didn't make.  ID: {}", call_id);
             }
         }
     }
@@ -600,7 +600,7 @@ impl ConnectionHandler {
                 promise.fail(CallError::new(reason, args, kwargs))
             },
             None => {
-                warn!("Recieved an error for a call we didn't make.  ID: {}", request_id);
+                warn!("Received an error for a call we didn't make.  ID: {}", request_id);
             }
         }
     }
@@ -631,7 +631,7 @@ impl ConnectionHandler {
                 self.handle_unregister_error(info, request_id, reason, args, kwargs)
             },
             ErrorType::Invocation => {
-                warn!("Recieved an error for an invocation message, which we did not (and could not) send")
+                warn!("Received an error for an invocation message, which we did not (and could not) send")
             },
             ErrorType::Call => {
                 self.handle_call_error(info, request_id, reason, args, kwargs)

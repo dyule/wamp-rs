@@ -24,10 +24,10 @@ impl ConnectionHandler {
         match  state {
             ConnectionState::Initializing => {
                 // TODO check specification for how this ought to work.
-                Err(Error::new(ErrorKind::InvalidState("Recieved a goodbye message before handshake complete")))
+                Err(Error::new(ErrorKind::InvalidState("Received a goodbye message before handshake complete")))
             },
             ConnectionState::Connected => {
-                info!("Recieved goobye message with reason: {:?}", reason);
+                info!("Received goodbye message with reason: {:?}", reason);
                 self.remove();
                 send_message(&self.info, &Message::Goodbye(ErrorDetails::new(), Reason::GoodbyeAndOut)).ok();
                 let mut info = self.info.lock().unwrap();
@@ -38,7 +38,7 @@ impl ConnectionHandler {
                 }
             },
             ConnectionState::ShuttingDown => {
-                info!("Recieved goobye message in response to our goodbye message with reason: {:?}", reason);
+                info!("Received goodbye message in response to our goodbye message with reason: {:?}", reason);
                 let mut info = self.info.lock().unwrap();
                 info.state = ConnectionState::Disconnected;
                 match info.sender.close(CloseCode::Normal) {
@@ -47,7 +47,7 @@ impl ConnectionHandler {
                 }
             },
             ConnectionState::Disconnected => {
-                warn!("Recieved goodbye message after closing connection");
+                warn!("Received goodbye message after closing connection");
                 Ok(())
             }
         }

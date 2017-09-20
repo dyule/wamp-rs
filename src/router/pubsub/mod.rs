@@ -25,7 +25,7 @@ impl ConnectionHandler{
                 send_message(&self.info, &Message::Subscribed(request_id, topic_id))
             },
              None => {
-                Err(Error::new(ErrorKind::InvalidState("Recieved a message while not attached to a realm")))
+                Err(Error::new(ErrorKind::InvalidState("Received a message while not attached to a realm")))
             }
         }
     }
@@ -51,7 +51,7 @@ impl ConnectionHandler{
                 send_message(&self.info, &Message::Unsubscribed(request_id))
             },
             None => {
-                Err(Error::new(ErrorKind::InvalidState("Recieved a message while not attached to a realm")))
+                Err(Error::new(ErrorKind::InvalidState("Received a message while not attached to a realm")))
             }
         }
     }
@@ -87,7 +87,7 @@ impl ConnectionHandler{
                 Ok(())
             },
             None => {
-                Err(Error::new(ErrorKind::InvalidState("Recieved a message while not attached to a realm")))
+                Err(Error::new(ErrorKind::InvalidState("Received a message while not attached to a realm")))
             }
         }
     }

@@ -78,7 +78,7 @@ fn subscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscription
     };
     let subscriptions = subscriptions.clone();
     client.subscribe_with_pattern(URI::new(&topic), Box::new(move |args, kwargs|{
-        println!("Recieved message on topic {} with args {:?} and kwargs {:?}", topic, args, kwargs);
+        println!("Received message on topic {} with args {:?} and kwargs {:?}", topic, args, kwargs);
     }), policy).unwrap().and_then(move |subscription|{
         println!("Subscribed to topic {}", subscription.topic.uri);
         subscriptions.lock().unwrap().push(subscription);

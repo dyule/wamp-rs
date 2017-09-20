@@ -26,7 +26,7 @@ impl ConnectionHandler{
                 send_message(&self.info, &Message::Registered(request_id, procedure_id))
             },
              None => {
-                Err(Error::new(ErrorKind::InvalidState("Recieved a message while not attached to a realm")))
+                Err(Error::new(ErrorKind::InvalidState("Received a message while not attached to a realm")))
             }
         }
     }
@@ -52,7 +52,7 @@ impl ConnectionHandler{
                 send_message(&self.info, &Message::Unregistered(request_id))
             },
             None => {
-                Err(Error::new(ErrorKind::InvalidState("Recieved a message while not attached to a realm")))
+                Err(Error::new(ErrorKind::InvalidState("Received a message while not attached to a realm")))
             }
         }
     }
@@ -83,7 +83,7 @@ impl ConnectionHandler{
                  Ok(())
              },
              None => {
-                 Err(Error::new(ErrorKind::InvalidState("Recieved a message while not attached to a realm")))
+                 Err(Error::new(ErrorKind::InvalidState("Received a message while not attached to a realm")))
              }
          }
     }
@@ -98,10 +98,10 @@ impl ConnectionHandler{
                     let result_message = Message::Result(call_id, ResultDetails::new(), args, kwargs);
                     send_message(&callee, &result_message)
                 } else {
-                    Err(Error::new(ErrorKind::InvalidState("Recieved a yield message for a call that wasn't sent")))
+                    Err(Error::new(ErrorKind::InvalidState("Received a yield message for a call that wasn't sent")))
                 }
             }, None => {
-                Err(Error::new(ErrorKind::InvalidState("Recieved a message while not attached to a realm")))
+                Err(Error::new(ErrorKind::InvalidState("Received a message while not attached to a realm")))
             }
         }
     }

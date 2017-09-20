@@ -44,7 +44,7 @@ fn send_message_msgpack(sender: &Sender, message: &Message) -> WSResult<()> {
 impl ConnectionHandler {
 
     fn handle_message(&mut self, message: Message) -> WampResult<()> {
-        debug!("Recieved message {:?}", message);
+        debug!("Received message {:?}", message);
         match message {
             Message::Hello(realm, details) => {
                 self.handle_hello(realm, details)
@@ -93,10 +93,10 @@ impl ConnectionHandler {
                         let error_message = Message::Error(ErrorType::Call, call_id, details, reason, args, kwargs);
                         send_message(&callee, &error_message)
                     } else {
-                        Err(Error::new(ErrorKind::InvalidState("Recieved an error message for a call that wasn't sent")))
+                        Err(Error::new(ErrorKind::InvalidState("Received an error message for a call that wasn't sent")))
                     }
                 }, None => {
-                    Err(Error::new(ErrorKind::InvalidState("Recieved a message while not attached to a realm")))
+                    Err(Error::new(ErrorKind::InvalidState("Received a message while not attached to a realm")))
                 }
             }
         } else {
