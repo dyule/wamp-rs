@@ -9,7 +9,7 @@ use rmp_serde::Deserializer as RMPDeserializer;
 use rmp_serde::Serializer;
 use utils::StructMapWriter;
 use std::io::Cursor;
-use messages::{Message, ErrorType, Reason};
+use messages::{Message, ErrorType, Reason, ErrorDetails};
 use ::{ID, WampResult, Error, ErrorKind, Dict, List};
 
 
@@ -136,11 +136,28 @@ impl ConnectionHandler {
             }
         })
     }
+
+    fn send_abort(&self, reason: Reason) -> WSResult<()> {
+        send_message(&self.info, &Message::Abort(ErrorDetails::new(), reason)).map_err(|e| {
+            let kind = e.get_kind();
+            if let ErrorKind::WSError(e) = kind {
+                e
+            } else {
+                WSError::new(WSErrorKind::Internal, kind.description())
+            }
+        })
+    }
+
     fn on_message_error(&mut self, error: Error) -> WSResult<()> {
         use std::error::Error as StdError;
         match error.get_kind() {
             ErrorKind::WSError(e) => Err(e),
             ErrorKind::URLError(_) => {unimplemented!()},
+            ErrorKind::HandshakeError(r) => {
+                error!("Handshake error: {}", r);
+                self.send_abort(r);
+                self.terminate_connection()
+            }
             ErrorKind::UnexpectedMessage(msg) => {
                 error!("Unexpected Message: {}", msg);
                 self.terminate_connection()

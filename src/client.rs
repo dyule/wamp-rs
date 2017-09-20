@@ -30,15 +30,6 @@ use eventual::{Complete, Future};
 use url::Url;
 use std::sync::mpsc::{channel, Sender as CHSender};
 
-macro_rules! try_websocket {
-    ($e: expr) => (
-        match $e {
-            Ok(result) => result,
-            Err(e) => return Err(Error::new(ErrorKind::WSError(e)))
-        }
-    );
-}
-
 const CONNECTION_TIMEOUT:Token = Token(124);
 
 pub struct Connection {
@@ -263,8 +254,7 @@ impl Handler for ConnectionHandler {
                 match serde_json::from_str(&message) {
                     Ok(message) => {
                         if !self.handle_message(message) {
-                            // TODO FIXME
-                            return Ok(());
+                            self.connection_info.lock().unwrap().sender.shutdown();
                         }
                     } Err(_) => {
                         error!("Received unknown message: {}", message);
@@ -277,7 +267,7 @@ impl Handler for ConnectionHandler {
                 match Deserialize::deserialize(&mut de) {
                     Ok(message) => {
                         if !self.handle_message(message) {
-                            return Ok(());
+                            self.connection_info.lock().unwrap().sender.shutdown();
                         }
                     },
                     Err(_) => {
@@ -342,10 +332,17 @@ impl ConnectionHandler {
         debug!("Processing message from server (state: {:?})", info.connection_state);
         match info.connection_state {
             ConnectionState::Connecting => {
-                if let Message::Welcome(session_id, details) = message {
-                    self.handle_welcome(info, session_id, details)
-                } else {
-                    return false;
+                match message {
+                    Message::Welcome(session_id, details) => {
+                        self.handle_welcome(info, session_id, details)
+                    },
+                    Message::Abort(_, reason) => {
+                        self.handle_abort(info, reason);
+                        return false
+                    }
+                    _ => {
+                        return false
+                    }
                 }
             }, ConnectionState:: Connected => {
                 debug!("Received a message from the server: {:?}", message);
@@ -544,6 +541,11 @@ impl ConnectionHandler {
         self.state_transmission.send(Ok(self.connection_info.clone())).unwrap();
     }
 
+    fn handle_abort(&self, mut info: MutexGuard<ConnectionInfo>, reason: Reason) {
+        error!("Router aborted connection.  Reason: {:?}", reason);
+        info.connection_state = ConnectionState::ShuttingDown;
+    }
+
     fn handle_event(&self, mut info: MutexGuard<ConnectionInfo>, subscription_id: ID, args: Option<List>, kwargs: Option<Dict>) {
         let args = args.unwrap_or(Vec::new());
         let kwargs = kwargs.unwrap_or(HashMap::new());
@@ -668,7 +670,7 @@ impl Client {
     }
 
     pub fn register_with_pattern(&mut self, procedure_pattern: URI, callback: Box<FnMut(List, Dict) -> CallResult<(Option<List>, Option<Dict>)> >, policy: MatchingPolicy) -> WampResult<Future<Registration, CallError>> {
-        // Send a register messages
+        // Send a register message
         let request_id = self.get_next_session_id();
         let (complete, future) = Future::<Registration, CallError>::pair();
         let callback = RegistrationCallbackWrapper {callback: callback};

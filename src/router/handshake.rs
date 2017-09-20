@@ -56,11 +56,14 @@ impl ConnectionHandler {
 
     fn set_realm(&mut self, realm: String) -> WampResult<()> {
         debug!("Setting realm to {}", realm);
-        let realm = self.router.realms.lock().unwrap()[&realm].clone();
-        {
+        if let Some(realm) =  self.router.realms.lock().unwrap().get(&realm) {
+            {
             realm.lock().unwrap().connections.push(self.info.clone());
         }
-        self.realm = Some(realm);
+            self.realm = Some(realm.clone());
+        } else {
+            return Err(Error::new(ErrorKind::HandshakeError(Reason::NoSuchRealm)))
+        }
         Ok(())
     }
 

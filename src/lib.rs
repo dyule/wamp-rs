@@ -42,6 +42,7 @@ pub struct Error {
 pub enum ErrorKind {
     WSError(WSError),
     URLError(ParseError),
+    HandshakeError(Reason),
     UnexpectedMessage(&'static str), // Used when a peer receives another message before Welcome or Hello
     ThreadError(SendError<messages::Message>),
     ConnectionLost,
@@ -84,6 +85,7 @@ impl ErrorKind {
             &ErrorKind::WSError(ref e) => e.to_string(),
             &ErrorKind::UnexpectedMessage(s) => s.to_string(),
             &ErrorKind::URLError(ref e) => e.to_string(),
+            &ErrorKind::HandshakeError(ref r) => r.to_string(),
             &ErrorKind::ThreadError(ref e) => e.to_string(),
             &ErrorKind::ConnectionLost => "Connection Lost".to_string(),
             &ErrorKind::Closing(ref s) => s.clone(),
