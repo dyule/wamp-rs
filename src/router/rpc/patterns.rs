@@ -76,9 +76,13 @@ impl<P:PatternData> Debug for RegistrationPatternNode <P>{
     }
 }
 
+impl <P:PatternData> Default for RegistrationPatternNode <P> {
+    fn default() -> RegistrationPatternNode<P> {RegistrationPatternNode::new()}
+}
+
 impl<P:PatternData> ProcdureCollection<P> {
     fn add_procedure(&mut self, registrant: P, matching_policy: MatchingPolicy, invocation_policy: InvocationPolicy) -> Result<(), PatternError> {
-        if self.procedures.len() == 0 || (invocation_policy == self.invocation_policy && invocation_policy != InvocationPolicy::Single) {
+        if self.procedures.is_empty() || (invocation_policy == self.invocation_policy && invocation_policy != InvocationPolicy::Single) {
             self.procedures.push(DataWrapper {
                 registrant: registrant,
                 policy: matching_policy
@@ -98,8 +102,7 @@ impl<P:PatternData> ProcdureCollection<P> {
     fn get_entry(&self) -> Option<&DataWrapper<P>> {
 
         match self.invocation_policy {
-            InvocationPolicy::Single => self.procedures.first(),
-            InvocationPolicy::First => self.procedures.first(),
+            InvocationPolicy::Single | InvocationPolicy::First => self.procedures.first(),
             InvocationPolicy::Last => self.procedures.last(),
             InvocationPolicy::Random => {
                 thread_rng().choose(&self.procedures)
@@ -125,7 +128,7 @@ impl<P:PatternData> RegistrationPatternNode<P> {
             self.id,
             self.prefix_connections.procedures.iter().map(|sub| sub.registrant.get_id()).collect::<Vec<_>>(),
             self.connections.procedures.iter().map(|sub| sub.registrant.get_id()).collect::<Vec<_>>()));
-        for (chunk, node) in self.edges.iter() {
+        for (chunk, node) in &self.edges {
             for _ in 0..indent * 2 {
                 try!(write!(f, "  "));
             }
@@ -137,26 +140,26 @@ impl<P:PatternData> RegistrationPatternNode<P> {
 
     /// Add a new registration to the pattern trie with the given pattern and matching policy.
     pub fn register_with(&mut self, topic: &URI, registrant: P, matching_policy: MatchingPolicy, invocation_policy: InvocationPolicy) -> Result<ID, PatternError> {
-        let mut uri_bits = topic.uri.split(".");
+        let mut uri_bits = topic.uri.split('.');
         let initial = match uri_bits.next() {
             Some(initial) => initial,
             None          => return Err(PatternError::new(Reason::InvalidURI))
         };
-        let edge = self.edges.entry(initial.to_string()).or_insert(RegistrationPatternNode::new());
+        let edge = self.edges.entry(initial.to_string()).or_insert_with(RegistrationPatternNode::new);
         edge.add_registration(uri_bits, registrant, matching_policy, invocation_policy)
     }
 
     /// Removes a registration from the pattern trie.
     pub fn unregister_with(&mut self, topic: &str, registrant: &P, is_prefix: bool) -> Result<ID, PatternError> {
-        let uri_bits = topic.split(".");
+        let uri_bits = topic.split('.');
         self.remove_registration(uri_bits, registrant.get_id(), is_prefix)
     }
 
     /// Gets a registrant that matches the given uri
     pub fn get_registrant_for(&self, procedure: URI) -> Result<(&P, ID, MatchingPolicy), PatternError> {
-        let wrapper = self.find_registrant(&procedure.uri.split(".").collect(), 0);
+        let wrapper = self.find_registrant(&procedure.uri.split('.').collect::<Vec<&str>>(), 0);
         match wrapper {
-            Some((ref data, id)) => {
+            Some((data, id)) => {
                 Ok((&data.registrant, id, data.policy))
             },
             None => {
@@ -188,12 +191,10 @@ impl<P:PatternData> RegistrationPatternNode<P> {
     fn add_registration<'a, I>(&mut self, mut uri_bits: I, registrant: P, matching_policy: MatchingPolicy, invocation_policy: InvocationPolicy) -> Result<ID, PatternError> where I: Iterator<Item=&'a str> {
         match uri_bits.next() {
             Some(uri_bit) => {
-                if uri_bit.len() == 0 {
-                    if matching_policy != MatchingPolicy::Wildcard {
-                        return Err(PatternError::new(Reason::InvalidURI));
-                    }
+                if uri_bit.is_empty() && matching_policy != MatchingPolicy::Wildcard {
+                    return Err(PatternError::new(Reason::InvalidURI));
                 }
-                let edge = self.edges.entry(uri_bit.to_string()).or_insert(RegistrationPatternNode::new());
+                let edge = self.edges.entry(uri_bit.to_string()).or_insert_with(RegistrationPatternNode::new);
                 edge.add_registration(uri_bits, registrant, matching_policy, invocation_policy)
             },
             None => {
@@ -212,7 +213,7 @@ impl<P:PatternData> RegistrationPatternNode<P> {
         // TODO consider deleting nodes in the tree if they are no longer in use.
         match uri_bits.next() {
             Some(uri_bit) => {
-                if let Some(mut edge) = self.edges.get_mut(uri_bit) {
+                if let Some(edge) = self.edges.get_mut(uri_bit) {
                     edge.remove_registration(uri_bits, registrant_id, is_prefix)
                 } else {
                     return Err(PatternError::new(Reason::InvalidURI))
@@ -221,16 +222,16 @@ impl<P:PatternData> RegistrationPatternNode<P> {
             None => {
                 if is_prefix {
                     self.prefix_connections.remove_procedure(registrant_id);
-                    Ok((self.prefix_id))
+                    Ok(self.prefix_id)
                 } else {
                     self.connections.remove_procedure(registrant_id);
-                    Ok((self.id))
+                    Ok(self.id)
                 }
             }
         }
     }
 
-    fn find_registrant(&self, uri_bits: &Vec<&str>, depth: usize) -> Option<(&DataWrapper<P>, ID)> {
+    fn find_registrant(&self, uri_bits: &[&str], depth: usize) -> Option<(&DataWrapper<P>, ID)> {
         if depth == uri_bits.len() {
             if let Some(registrant) = self.connections.get_entry() {
                 Some((registrant, self.id))
@@ -239,18 +240,17 @@ impl<P:PatternData> RegistrationPatternNode<P> {
             } else {
                 None
             }
+        } else if let Some((registrant, id)) = self.recurse(uri_bits, depth) {
+            Some((registrant, id))
+        } else if let Some(registrant) = self.prefix_connections.get_entry() {
+            Some((registrant, self.prefix_id))
         } else {
-            if let Some((registrant, id)) = self.recurse(uri_bits, depth) {
-                Some((registrant, id))
-            } else if let Some(registrant) = self.prefix_connections.get_entry() {
-                Some((registrant, self.prefix_id))
-            } else {
-                None
-            }
+            None
         }
+
     }
 
-    fn recurse(&self, uri_bits: &Vec<&str>, depth: usize) -> Option<(&DataWrapper<P>, ID)> {
+    fn recurse(&self, uri_bits: &[&str], depth: usize) -> Option<(&DataWrapper<P>, ID)> {
         if let Some(edge) = self.edges.get(uri_bits[depth]) {
             if let Some(registrant) = edge.find_registrant(uri_bits, depth + 1) {
                 return Some(registrant)

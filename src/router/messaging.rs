@@ -88,7 +88,7 @@ impl ConnectionHandler {
             match self.realm {
                 Some(ref realm) => {
                     let mut realm = realm.lock().unwrap();
-                    let mut manager = &mut realm.registration_manager;
+                    let manager = &mut realm.registration_manager;
                     if let Some((call_id, callee)) = manager.active_calls.remove(&request_id) {
                         let error_message = Message::Error(ErrorType::Call, call_id, details, reason, args, kwargs);
                         send_message(&callee, &error_message)
@@ -155,7 +155,7 @@ impl ConnectionHandler {
             ErrorKind::URLError(_) => {unimplemented!()},
             ErrorKind::HandshakeError(r) => {
                 error!("Handshake error: {}", r);
-                self.send_abort(r);
+                try!(self.send_abort(r));
                 self.terminate_connection()
             }
             ErrorKind::UnexpectedMessage(msg) => {

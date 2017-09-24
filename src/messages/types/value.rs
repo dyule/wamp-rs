@@ -38,7 +38,7 @@ struct ValueVisitor;
 
 pub trait ArgList {
     fn get_int(&self, index: usize) -> CallResult<Option<i64>>;
-    fn get_string<'a>(&'a self, index: usize) -> CallResult<Option<&'a str>>;
+    fn get_string(&self, index: usize) -> CallResult<Option<&str>>;
     fn verify_len(&self, expected_len: usize) -> CallResult<()>;
 }
 
@@ -52,7 +52,7 @@ impl ArgList for List {
         let value = self.get(index);
         match value {
             Some(value) => {
-                if let &Value::Integer(value) = value {
+                if let Value::Integer(value) = *value {
                     Ok(Some(value))
                 } else {
                     Err(CallError::new(Reason::InvalidArgument, Some(vec![Value::String(format!("Expected integer, got {}", value.summarize()))]), None))
@@ -64,11 +64,11 @@ impl ArgList for List {
         }
     }
 
-    fn get_string<'a>(&'a self, index: usize) -> CallResult<Option<&'a str>> {
+    fn get_string(&self, index: usize) -> CallResult<Option<&str>> {
         let value = self.get(index);
         match value {
             Some(value) => {
-                if let &Value::String(ref value) = value {
+                if let Value::String(ref value) = *value {
                     Ok(Some(value))
                 } else {
                     Err(CallError::new(Reason::InvalidArgument, Some(vec![Value::String(format!("Expected string, got {}", value.summarize()))]), None))
@@ -94,7 +94,7 @@ impl ArgDict for Dict {
         let value = self.get(key);
         match value {
             Some(value) => {
-                if let &Value::Integer(value) = value {
+                if let Value::Integer(value) = *value {
                     Ok(Some(value))
                 } else {
                     Err(CallError::new(Reason::InvalidArgument, Some(vec![Value::String(format!("Expected integer, got {}", value.summarize()))]), None))
@@ -109,7 +109,7 @@ impl ArgDict for Dict {
         let value = self.get(key);
         match value {
             Some(value) => {
-                if let &Value::String(ref value) = value {
+                if let Value::String(ref value) = *value {
                     Ok(Some(value))
                 } else {
                     Err(CallError::new(Reason::InvalidArgument, Some(vec![Value::String(format!("Expected string, got {}", value.summarize()))]), None))
@@ -124,32 +124,32 @@ impl ArgDict for Dict {
 
 impl Value {
     pub fn summarize(&self) -> String {
-        match self {
-            &Value::Dict(ref d) => {
+        match *self {
+            Value::Dict(ref d) => {
                 let mut result = String::new();
                 result.push('{');
                 result.push_str(&d.iter().take(50).map(|(key, value)| format!("{}:{}", key, value.summarize())).collect::<Vec<_>>().join(","));
                 result.push('}');
                 result
             },
-            &Value::Integer(i) => {
+            Value::Integer(i) => {
                 i.to_string()
             },
-            &Value::String(ref s) => {
+            Value::String(ref s) => {
                 if s.len() > 50 {
                     s[..50].to_string()
                 } else {
                     s.clone()
                 }
             }
-            &Value::List(ref l) => {
+            Value::List(ref l) => {
                 let mut result = String::new();
                 result.push('[');
                 result.push_str(&l.iter().take(50).map(|element| element.summarize()).collect::<Vec<_>>().join(","));
                 result.push(']');
                 result
             }
-            &Value::Boolean(b) => {
+            Value::Boolean(b) => {
                 b.to_string()
             }
         }
@@ -235,12 +235,12 @@ impl serde::Serialize for Value {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::ser::Serializer,
     {
-        match self {
-            &Value::Dict(ref dict) => dict.serialize(serializer),
-            &Value::String(ref s) => serializer.serialize_str(s),
-            &Value::Integer(i) => serializer.serialize_i64(i),
-            &Value::List(ref list) => list.serialize(serializer),
-            &Value::Boolean(b) => serializer.serialize_bool(b)
+        match *self {
+            Value::Dict(ref dict) => dict.serialize(serializer),
+            Value::String(ref s) => serializer.serialize_str(s),
+            Value::Integer(i) => serializer.serialize_i64(i),
+            Value::List(ref list) => list.serialize(serializer),
+            Value::Boolean(b) => serializer.serialize_bool(b)
         }
     }
 }

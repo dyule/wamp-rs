@@ -3,39 +3,39 @@ use serde;
 use std::fmt;
 use serde::ser::SerializeStruct;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct HelloDetails {
     #[serde(default, skip_serializing_if="Option::is_none")]
     agent: Option<String>,
     roles: ClientRoles
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct WelcomeDetails {
     #[serde(default, skip_serializing_if="Option::is_none")]
     agent: Option<String>,
     roles:  RouterRoles
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct ErrorDetails {
     #[serde(default, skip_serializing_if="Option::is_none")]
     message: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct SubscribeOptions {
     #[serde(default, rename="match", skip_serializing_if="MatchingPolicy::is_strict")]
     pub pattern_match: MatchingPolicy
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct PublishOptions {
     #[serde(default, skip_serializing_if="is_not")]
     acknowledge: bool
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct RegisterOptions {
     #[serde(default, rename="match", skip_serializing_if="MatchingPolicy::is_strict")]
     pub pattern_match: MatchingPolicy,
@@ -44,13 +44,13 @@ pub struct RegisterOptions {
     pub invocation_policy: InvocationPolicy
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Default)]
 pub struct CallOptions;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Default)]
 pub struct YieldOptions;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct EventDetails {
     #[serde(default, skip_serializing_if="Option::is_none")]
     publisher: Option<String>,
@@ -63,13 +63,13 @@ pub struct EventDetails {
 
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct InvocationDetails {
     #[serde(default, skip_serializing_if="Option::is_none")]
     pub procedure: Option<URI>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Default)]
 pub struct ResultDetails;
 
 impl HelloDetails {
@@ -105,7 +105,6 @@ impl WelcomeDetails {
     }
 
 }
-
 
 impl ErrorDetails {
     pub fn new() -> ErrorDetails {

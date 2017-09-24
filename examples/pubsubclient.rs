@@ -32,7 +32,7 @@ fn get_input_from_user() -> String {
     input
 }
 
-fn process_input(input: String) -> (Command, Vec<String>) {
+fn process_input(input: &str) -> (Command, Vec<String>) {
     let mut i_iter = input.splitn(2, ' ');
     let command = match i_iter.next() {
         Some(command) => command.trim().to_lowercase(),
@@ -55,10 +55,10 @@ fn process_input(input: String) -> (Command, Vec<String>) {
     (command, args)
 }
 
-fn subscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscription>>>, args: Vec<String>) {
+fn subscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscription>>>, args: &[String]) {
     if args.len() > 2 {
         println!("Too many arguments to subscribe.  Ignoring");
-    } else if args.len() == 0 {
+    } else if args.is_empty() {
         println!("Please specify the topic to subscribe to");
         return;
     }
@@ -76,7 +76,7 @@ fn subscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscription
     } else {
         MatchingPolicy::Strict
     };
-    let subscriptions = subscriptions.clone();
+    let subscriptions = Arc::clone(subscriptions);
     client.subscribe_with_pattern(URI::new(&topic), Box::new(move |args, kwargs|{
         println!("Received message on topic {} with args {:?} and kwargs {:?}", topic, args, kwargs);
     }), policy).unwrap().and_then(move |subscription|{
@@ -86,10 +86,10 @@ fn subscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscription
     }).await().unwrap();
 }
 
-fn unsubscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscription>>>, args: Vec<String>) {
+fn unsubscribe(client: &mut Client, subscriptions: &mut Arc<Mutex<Vec<Subscription>>>, args: &[String]) {
     if args.len() > 1 {
         println!("Too many arguments to subscribe.  Ignoring");
-    } else if args.len() == 0 {
+    } else if args.is_empty() {
         println!("Please specify the topic to subscribe to");
         return;
     }
@@ -120,19 +120,18 @@ fn list(subscriptions: &Arc<Mutex<Vec<Subscription>>>) {
     }
 }
 
-fn publish(client: &mut Client, args: Vec<String>) {
-    if args.len() == 0 {
+fn publish(client: &mut Client, args: &[String]) {
+    if args.is_empty() {
         println!("Please specify a topic to publish to");
     }
-    let mut topic_arr = args.clone();
-    let args = topic_arr.split_off(1);
-    let args = args.iter().map(|arg|{
+    let uri = &args[0];
+    let args = args[1..].iter().map(|arg|{
         match arg.parse::<i64>() {
             Ok(i)  => Value::Integer(i),
             Err(_) => Value::String(arg.clone())
         }
     }).collect();
-    client.publish_and_acknowledge(URI::new(&topic_arr[0]), Some(args), None).unwrap().await().unwrap();
+    client.publish_and_acknowledge(URI::new(uri), Some(args), None).unwrap().await().unwrap();
 }
 
 fn help() {
@@ -157,11 +156,11 @@ fn event_loop(mut client: Client) {
     loop {
         print_prompt();
         let input = get_input_from_user();
-        let (command, args) = process_input(input);
+        let (command, args) = process_input(&input);
         match command {
-            Command::Sub => subscribe(&mut client, &mut subscriptions, args),
-            Command::Pub => publish(&mut client, args),
-            Command::Unsub => unsubscribe(&mut client, &mut subscriptions, args),
+            Command::Sub => subscribe(&mut client, &mut subscriptions, &args),
+            Command::Pub => publish(&mut client, &args),
+            Command::Unsub => unsubscribe(&mut client, &mut subscriptions, &args),
             Command::List => list(&subscriptions),
             Command::Help => help(),
             Command::Quit => break,

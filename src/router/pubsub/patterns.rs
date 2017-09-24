@@ -94,14 +94,14 @@ impl PatternData for Arc<Mutex<ConnectionInfo>> {
 
 impl<'a, P:PatternData> Debug for IterState<'a, P>{
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            &IterState::None => "None",
-            &IterState::Wildcard => "Wildcard",
-            &IterState::Strict => "Strict",
-            &IterState::Prefix(_) => "Prefix",
-            &IterState::PrefixComplete => "PrefixComplete",
-            &IterState::Subs(_) => "Subs",
-            &IterState::AllComplete => "AllComplete"
+        write!(f, "{}", match *self {
+            IterState::None => "None",
+            IterState::Wildcard => "Wildcard",
+            IterState::Strict => "Strict",
+            IterState::Prefix(_) => "Prefix",
+            IterState::PrefixComplete => "PrefixComplete",
+            IterState::Subs(_) => "Subs",
+            IterState::AllComplete => "AllComplete"
         })
     }
 }
@@ -119,7 +119,7 @@ impl<P:PatternData> SubscriptionPatternNode<P> {
             self.id,
             self.prefix_connections.iter().map(|sub| sub.subscriber.get_id()).collect::<Vec<_>>(),
             self.connections.iter().map(|sub| sub.subscriber.get_id()).collect::<Vec<_>>()));
-        for (chunk, node) in self.edges.iter() {
+        for (chunk, node) in &self.edges {
             for _ in 0..indent * 2 {
                 try!(write!(f, "  "));
             }
@@ -131,18 +131,18 @@ impl<P:PatternData> SubscriptionPatternNode<P> {
 
     /// Add a new subscription to the pattern trie with the given pattern and matching policy.
     pub fn subscribe_with(&mut self, topic: &URI, subscriber: P, matching_policy: MatchingPolicy) -> Result<ID, PatternError> {
-        let mut uri_bits = topic.uri.split(".");
+        let mut uri_bits = topic.uri.split('.');
         let initial = match uri_bits.next() {
             Some(initial) => initial,
             None          => return Err(PatternError::new(Reason::InvalidURI))
         };
-        let edge = self.edges.entry(initial.to_string()).or_insert(SubscriptionPatternNode::new());
+        let edge = self.edges.entry(initial.to_string()).or_insert_with(SubscriptionPatternNode::new);
         edge.add_subscription(uri_bits, subscriber, matching_policy)
     }
 
     /// Removes a subscription from the pattern trie.
     pub fn unsubscribe_with(&mut self, topic: &str, subscriber: &P, is_prefix: bool) -> Result<ID, PatternError> {
-        let uri_bits = topic.split(".");
+        let uri_bits = topic.split('.');
         self.remove_subscription(uri_bits, subscriber.get_id(), is_prefix)
     }
 
@@ -161,12 +161,10 @@ impl<P:PatternData> SubscriptionPatternNode<P> {
     fn add_subscription<'a, I>(&mut self, mut uri_bits: I, subscriber: P, matching_policy: MatchingPolicy) -> Result<ID, PatternError> where I: Iterator<Item=&'a str> {
         match uri_bits.next() {
             Some(uri_bit) => {
-                if uri_bit.len() == 0 {
-                    if matching_policy != MatchingPolicy::Wildcard {
-                        return Err(PatternError::new(Reason::InvalidURI));
-                    }
+                if uri_bit.is_empty() &&  matching_policy != MatchingPolicy::Wildcard {
+                    return Err(PatternError::new(Reason::InvalidURI));
                 }
-                let edge = self.edges.entry(uri_bit.to_string()).or_insert(SubscriptionPatternNode::new());
+                let edge = self.edges.entry(uri_bit.to_string()).or_insert_with(SubscriptionPatternNode::new);
                 edge.add_subscription(uri_bits, subscriber, matching_policy)
             },
             None => {
@@ -191,7 +189,7 @@ impl<P:PatternData> SubscriptionPatternNode<P> {
         // TODO consider deleting nodes in the tree if they are no longer in use.
         match uri_bits.next() {
             Some(uri_bit) => {
-                if let Some(mut edge) = self.edges.get_mut(uri_bit) {
+                if let Some(edge) = self.edges.get_mut(uri_bit) {
                     edge.remove_subscription(uri_bits, subscriber_id, is_prefix)
                 } else {
                     return Err(PatternError::new(Reason::InvalidURI))
@@ -200,10 +198,10 @@ impl<P:PatternData> SubscriptionPatternNode<P> {
             None => {
                 if is_prefix {
                     self.prefix_connections.retain(|sub| sub.subscriber.get_id() != subscriber_id);
-                    Ok((self.prefix_id))
+                    Ok(self.prefix_id)
                 } else {
                     self.connections.retain(|sub| sub.subscriber.get_id() != subscriber_id);
-                    Ok((self.id))
+                    Ok(self.id)
                 }
             }
         }
@@ -214,7 +212,7 @@ impl<P:PatternData> SubscriptionPatternNode<P> {
     ///
     /// This iterator returns a triple with the connection info, the id of the subscription and
     /// the matching policy used when the subscription was created.
-    pub fn filter<'a>(&'a self, topic: URI) -> MatchIterator<'a, P> {
+    pub fn filter(&self, topic: URI) -> MatchIterator<P> {
         MatchIterator {
             current: Box::new(StackFrame {
                 node: self,
@@ -262,31 +260,25 @@ impl <'a, P: PatternData> MatchIterator<'a, P> {
             IterState::PrefixComplete => {
                 if self.current.depth == self.uri.len() {
                     self.current.state = IterState::Subs(self.current.node.connections.iter());
+                } else if let Some(child) = self.current.node.edges.get("") {
+                    self.current.state = IterState::Wildcard;
+                    self.push(child);
+                } else if let Some(child) = self.current.node.edges.get(&self.uri[self.current.depth]) {
+                    self.current.state = IterState::Strict;
+                    self.push(child);
                 } else {
-                    if let Some(child) = self.current.node.edges.get("") {
-                        self.current.state = IterState::Wildcard;
-                        self.push(child);
-                    } else {
-                        if let Some(child) = self.current.node.edges.get(&self.uri[self.current.depth]) {
-                            self.current.state = IterState::Strict;
-                            self.push(child);
-                        }
-                        else {
-                            self.current.state = IterState::AllComplete;
-                        }
-                    }
+                    self.current.state = IterState::AllComplete;
                 }
+
            },
            IterState::Wildcard => {
                if self.current.depth == self.uri.len() {
                    self.current.state = IterState::AllComplete;
+               } else if let Some(child) = self.current.node.edges.get(&self.uri[self.current.depth]) {
+                   self.current.state = IterState::Strict;
+                   self.push(child);
                } else {
-                   if let Some(child) = self.current.node.edges.get(&self.uri[self.current.depth]) {
-                       self.current.state = IterState::Strict;
-                       self.push(child);
-                   } else {
-                       self.current.state = IterState::AllComplete;
-                   }
+                   self.current.state = IterState::AllComplete;
                }
            },
            IterState::Strict => {
@@ -313,19 +305,20 @@ impl <'a, P: PatternData> MatchIterator<'a, P> {
      type Item = (&'a P, ID, MatchingPolicy);
 
      fn next(&mut self) -> Option<(&'a P, ID, MatchingPolicy)> {
-
+        let prefix_id = self.current.node.prefix_id;
+        let node_id = self.current.node.id;
          // If we are currently iterating through connections, continue iterating
          match self.current.state {
              IterState::Prefix(ref mut prefix_iter) => {
                  let next = prefix_iter.next();
                  if let Some(next) = next {
-                     return Some((&next.subscriber, self.current.node.prefix_id.clone(), next.policy))
+                     return Some((&next.subscriber, prefix_id, next.policy))
                  }
             },
             IterState::Subs(ref mut sub_iter) => {
                 let next = sub_iter.next();
                 if let Some(next) = next {
-                    return Some((&next.subscriber, self.current.node.id.clone(), next.policy))
+                    return Some((&next.subscriber, node_id, next.policy))
                 }
             },
             _ => {}

@@ -1,3 +1,4 @@
+#![cfg_attr(feature = "cargo-clippy", allow(match_same_arms))]
 extern crate serde;
 extern crate serde_json;
 #[macro_use]
@@ -8,6 +9,7 @@ extern crate rmp;
 extern crate rmp_serde;
 extern crate rand;
 extern crate eventual;
+
 
 #[macro_use]
 extern crate log;
@@ -81,21 +83,21 @@ impl fmt::Display for Error {
 
 impl ErrorKind {
     fn description(&self) -> String {
-        match self {
-            &ErrorKind::WSError(ref e) => e.to_string(),
-            &ErrorKind::UnexpectedMessage(s) => s.to_string(),
-            &ErrorKind::URLError(ref e) => e.to_string(),
-            &ErrorKind::HandshakeError(ref r) => r.to_string(),
-            &ErrorKind::ThreadError(ref e) => e.to_string(),
-            &ErrorKind::ConnectionLost => "Connection Lost".to_string(),
-            &ErrorKind::Closing(ref s) => s.clone(),
-            &ErrorKind::JSONError(ref e) => e.to_string(),
-            &ErrorKind::MsgPackError(ref e) => e.to_string(),
-            &ErrorKind::MalformedData => "Malformed Data".to_string(),
-            &ErrorKind::InvalidMessageType(ref t) => format!("Invalid Message Type: {:?}", t),
-            &ErrorKind::InvalidState(ref s) => s.to_string(),
-            &ErrorKind::Timeout => "Connection timed out".to_string(),
-            &ErrorKind::ErrorReason(_, _, ref s) => s.to_string(),
+        match *self {
+            ErrorKind::WSError(ref e) => e.to_string(),
+            ErrorKind::URLError(ref e) => e.to_string(),
+            ErrorKind::HandshakeError(ref r) => r.to_string(),
+            ErrorKind::ThreadError(ref e) => e.to_string(),
+            ErrorKind::JSONError(ref e) => e.to_string(),
+            ErrorKind::MsgPackError(ref e) => e.to_string(),
+            ErrorKind::ErrorReason(_, _, ref s) => s.to_string(),
+            ErrorKind::Closing(ref s) => s.clone(),
+            ErrorKind::UnexpectedMessage(s) |
+            ErrorKind::InvalidState(s) => s.to_string(),
+            ErrorKind::ConnectionLost => "Connection Lost".to_string(),
+            ErrorKind::MalformedData => "Malformed Data".to_string(),
+            ErrorKind::Timeout => "Connection timed out".to_string(),
+            ErrorKind::InvalidMessageType(ref t) => format!("Invalid Message Type: {:?}", t),
         }
     }
 }

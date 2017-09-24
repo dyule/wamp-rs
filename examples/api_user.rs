@@ -29,7 +29,7 @@ fn get_input_from_user() -> String {
     input
 }
 
-fn process_input(input: String) -> (Command, Vec<String>) {
+fn process_input(input: &str) -> (Command, Vec<String>) {
     let mut i_iter = input.splitn(2, ' ');
     let command = match i_iter.next() {
         Some(command) => command.trim().to_lowercase(),
@@ -50,7 +50,7 @@ fn process_input(input: String) -> (Command, Vec<String>) {
     (command, args)
 }
 
-fn add(client: &mut Client, args: Vec<String>) {
+fn add(client: &mut Client, args: &[String]) {
     if args.len() > 2 {
         println!("Too many arguments to add.  Ignoring");
     } else if args.len() < 2 {
@@ -109,9 +109,9 @@ fn event_loop(mut client: Client) {
     loop {
         print_prompt();
         let input = get_input_from_user();
-        let (command, args) = process_input(input);
+        let (command, args) = process_input(&input);
         match command {
-            Command::Add => add(&mut client, args),
+            Command::Add => add(&mut client, &args),
             Command::Echo => echo(&mut client, args),
             Command::Help => help(),
             Command::Quit => break,

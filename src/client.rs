@@ -54,8 +54,10 @@ struct SubscriptionCallbackWrapper {
 }
 
 struct RegistrationCallbackWrapper {
-    callback: Box<FnMut(List, Dict) -> CallResult<(Option<List>, Option<Dict>)>>
+    callback: Callback
 }
+
+pub type Callback = Box<FnMut(List, Dict) -> CallResult<(Option<List>, Option<Dict>)> >;
 
 static WAMP_JSON:&'static str = "wamp.2.json";
 static WAMP_MSGPACK:&'static str = "wamp.2.msgpack";
@@ -154,7 +156,7 @@ impl Connection {
         }
     }
 
-    pub fn connect<'a>(&self) -> WampResult<Client> {
+    pub fn connect(&self) -> WampResult<Client> {
         let (tx, rx) = channel();
         let url = self.url.clone();
         let realm = self.realm.clone();
@@ -179,12 +181,12 @@ impl Connection {
                     shutdown_complete: None,
                     session_id: 0
                 }));
-                let handler = ConnectionHandler {
+
+                 ConnectionHandler {
                     state_transmission: tx.clone(),
                     connection_info: info,
                     realm: realm.clone()
-                };
-                handler
+                }
             }).map_err(|e| {
                 Error::new(ErrorKind::WSError(e))
             });
@@ -254,7 +256,7 @@ impl Handler for ConnectionHandler {
                 match serde_json::from_str(&message) {
                     Ok(message) => {
                         if !self.handle_message(message) {
-                            self.connection_info.lock().unwrap().sender.shutdown();
+                            return self.connection_info.lock().unwrap().sender.shutdown();
                         }
                     } Err(_) => {
                         error!("Received unknown message: {}", message);
@@ -267,7 +269,7 @@ impl Handler for ConnectionHandler {
                 match Deserialize::deserialize(&mut de) {
                     Ok(message) => {
                         if !self.handle_message(message) {
-                            self.connection_info.lock().unwrap().sender.shutdown();
+                            return self.connection_info.lock().unwrap().sender.shutdown();
                         }
                     },
                     Err(_) => {
@@ -294,12 +296,9 @@ impl Handler for ConnectionHandler {
         cancel_future!(info.call_requests);
         info.sender.shutdown().ok();
 
-        match info.shutdown_complete.take() {
-            Some(promise) => {
-                promise.complete(());
-            },
-            None => {}
-        }
+        if let Some(promise) = info.shutdown_complete.take() {
+    promise.complete(());
+}
     }
 
     fn on_timeout(&mut self, token: Token) -> WSResult<()> {
@@ -386,10 +385,7 @@ impl ConnectionHandler {
                 if let Message::Goodbye(_, _) = message {
                     // The router has seen our goodbye message and has responded in kind
                     info!("Router acknowledged disconnect");
-                    match info.shutdown_complete.take() {
-                        Some(promise) => promise.complete(()),
-                        None          => {}
-                    }
+                    if let Some(promise) = info.shutdown_complete.take() { promise.complete(()) }
                     return false;
                 } else {
                     warn!("Received message after shutting down, ignoring: {:?}", message);
@@ -538,7 +534,7 @@ impl ConnectionHandler {
         info.session_id = session_id;
         info.connection_state = ConnectionState::Connected;
         drop(info);
-        self.state_transmission.send(Ok(self.connection_info.clone())).unwrap();
+        self.state_transmission.send(Ok(Arc::clone(&self.connection_info))).unwrap();
     }
 
     fn handle_abort(&self, mut info: MutexGuard<ConnectionInfo>, reason: Reason) {
@@ -547,11 +543,11 @@ impl ConnectionHandler {
     }
 
     fn handle_event(&self, mut info: MutexGuard<ConnectionInfo>, subscription_id: ID, args: Option<List>, kwargs: Option<Dict>) {
-        let args = args.unwrap_or(Vec::new());
-        let kwargs = kwargs.unwrap_or(HashMap::new());
+        let args = args.unwrap_or_default();
+        let kwargs = kwargs.unwrap_or_default();
         match info.subscriptions.get_mut(&subscription_id) {
             Some(subscription) => {
-                let ref mut callback = subscription.callback;
+                let callback = &mut subscription.callback;
                 callback(args, kwargs);
             },
             None => {
@@ -561,16 +557,16 @@ impl ConnectionHandler {
     }
 
     fn handle_invocation(&self, mut info: MutexGuard<ConnectionInfo>, request_id: ID, registration_id: ID, _details: InvocationDetails, args: Option<List>, kwargs: Option<Dict>) {
-        let args = args.unwrap_or(Vec::new());
-        let kwargs = kwargs.unwrap_or(HashMap::new());
+        let args = args.unwrap_or_default();
+        let kwargs = kwargs.unwrap_or_default();
         let message = match info.registrations.get_mut(&registration_id) {
             Some(registration) => {
-                let ref mut callback = registration.callback;
+                let callback = &mut registration.callback;
                 match callback(args, kwargs) {
                         Ok((rargs, rkwargs)) => {
                             Message::Yield(request_id, YieldOptions::new(), rargs, rkwargs)
                         }, Err(error) => {
-                            let (reason, args, kwargs) = error.to_tuple();
+                            let (reason, args, kwargs) = error.into_tuple();
                             Message::Error(ErrorType::Invocation, request_id, HashMap::new(), reason, args, kwargs)
                         }
                 }
@@ -584,8 +580,8 @@ impl ConnectionHandler {
     }
 
     fn handle_result(&self, mut info: MutexGuard<ConnectionInfo>, call_id: ID, _details: ResultDetails, args: Option<List>, kwargs: Option<Dict>) {
-        let args = args.unwrap_or(Vec::new());
-        let kwargs = kwargs.unwrap_or(HashMap::new());
+        let args = args.unwrap_or_default();
+        let kwargs = kwargs.unwrap_or_default();
         match info.call_requests.remove(&call_id) {
             Some(promise) => {
                 promise.complete((args, kwargs));
@@ -615,6 +611,7 @@ impl ConnectionHandler {
 
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
     fn handle_error(&self, info: MutexGuard<ConnectionInfo>, e_type: ErrorType, request_id: ID, _details: Dict, reason: Reason, args: Option<List>, kwargs: Option<Dict>) {
         match e_type {
             ErrorType::Subscribe => {
@@ -669,7 +666,7 @@ impl Client {
         self.subscribe_with_pattern(topic, callback, MatchingPolicy::Strict)
     }
 
-    pub fn register_with_pattern(&mut self, procedure_pattern: URI, callback: Box<FnMut(List, Dict) -> CallResult<(Option<List>, Option<Dict>)> >, policy: MatchingPolicy) -> WampResult<Future<Registration, CallError>> {
+    pub fn register_with_pattern(&mut self, procedure_pattern: URI, callback: Callback, policy: MatchingPolicy) -> WampResult<Future<Registration, CallError>> {
         // Send a register message
         let request_id = self.get_next_session_id();
         let (complete, future) = Future::<Registration, CallError>::pair();
@@ -686,7 +683,7 @@ impl Client {
         Ok(future)
     }
 
-    pub fn register(&mut self, procedure: URI, callback: Box<FnMut(List, Dict) -> CallResult<(Option<List>, Option<Dict>)> >) -> WampResult<Future<Registration, CallError>> {
+    pub fn register(&mut self, procedure: URI, callback: Callback) -> WampResult<Future<Registration, CallError>> {
         self.register_with_pattern(procedure, callback, MatchingPolicy::Strict)
     }
 

@@ -1,4 +1,7 @@
 mod patterns;
+
+use std::sync::Arc;
+
 pub use router::rpc::patterns::RegistrationPatternNode;
 
 use super::{ConnectionHandler, random_id};
@@ -13,9 +16,9 @@ impl ConnectionHandler{
         match self.realm {
             Some(ref realm) => {
                 let mut realm = realm.lock().unwrap();
-                let mut manager = &mut realm.registration_manager;
+                let manager = &mut realm.registration_manager;
                 let procedure_id = {
-                    let procedure_id = match manager.registrations.register_with(&procedure, self.info.clone(), options.pattern_match.clone(), options.invocation_policy.clone()) {
+                    let procedure_id = match manager.registrations.register_with(&procedure, Arc::clone(&self.info), options.pattern_match, options.invocation_policy) {
                         Ok(procedure_id) => procedure_id,
                         Err(e) => return Err(Error::new(ErrorKind::ErrorReason(ErrorType::Register, request_id, e.reason())))
                     };
@@ -35,9 +38,9 @@ impl ConnectionHandler{
         match self.realm {
             Some(ref realm) => {
                 let mut realm = realm.lock().unwrap();
-                let mut manager = &mut realm.registration_manager;
+                let manager = &mut realm.registration_manager;
                 let (procedure_uri, is_prefix) =  match manager.registration_ids_to_uris.get(&procedure_id) {
-                    Some(&(ref uri, ref is_prefix)) => (uri.clone(), is_prefix.clone()),
+                    Some(&(ref uri, is_prefix)) => (uri.clone(), is_prefix),
                     None => return Err(Error::new(ErrorKind::ErrorReason(ErrorType::Unregister, request_id, Reason::NoSuchProcedure)))
                 };
 
@@ -62,14 +65,14 @@ impl ConnectionHandler{
          match self.realm {
              Some(ref realm) => {
                  let mut realm = realm.lock().unwrap();
-                 let mut manager = &mut realm.registration_manager;
+                 let manager = &mut realm.registration_manager;
                  let invocation_id = random_id();
                  info!("Current procedure tree: {:?}", manager.registrations);
                  let  (registrant, procedure_id, policy) = match manager.registrations.get_registrant_for(procedure.clone()) {
                      Ok(registrant) => registrant,
                      Err(e) => return Err(Error::new(ErrorKind::ErrorReason(ErrorType::Call, request_id, e.reason())))
                  };
-                 manager.active_calls.insert(invocation_id, (request_id, self.info.clone()));
+                 manager.active_calls.insert(invocation_id, (request_id, Arc::clone(&self.info)));
                  let mut details = InvocationDetails::new();
                  details.procedure = if policy == MatchingPolicy::Strict {
                      None
@@ -93,7 +96,7 @@ impl ConnectionHandler{
         match self.realm {
             Some(ref realm) => {
                 let mut realm = realm.lock().unwrap();
-                let mut manager = &mut realm.registration_manager;
+                let manager = &mut realm.registration_manager;
                 if let Some((call_id, callee)) = manager.active_calls.remove(&invocation_id) {
                     let result_message = Message::Result(call_id, ResultDetails::new(), args, kwargs);
                     send_message(&callee, &result_message)

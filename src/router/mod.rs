@@ -80,6 +80,12 @@ fn random_id() -> u64 {
 
 unsafe impl Sync for Router {}
 
+impl Default for Router {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Router {
     #[inline]
     pub fn new() -> Router {
@@ -91,7 +97,7 @@ impl Router {
     }
 
     pub fn listen(&self, url: &str) -> JoinHandle<()> {
-        let router_info = self.info.clone();
+        let router_info = Arc::clone(&self.info);
         let url = url.to_string();
         thread::spawn(move ||{
             ws_listen(&url[..], |sender| {
@@ -105,7 +111,7 @@ impl Router {
                     subscribed_topics: Vec::new(),
                     registered_procedures: Vec::new(),
                     realm: None,
-                    router: router_info.clone()
+                    router: Arc::clone(&router_info)
                 }
             }).unwrap();
         })
@@ -134,7 +140,7 @@ impl Router {
 
     pub fn shutdown(&self) {
         for realm in self.info.realms.lock().unwrap().values() {
-            for connection in realm.lock().unwrap().connections.iter() {
+            for connection in &realm.lock().unwrap().connections {
                 send_message(connection, &Message::Goodbye(ErrorDetails::new(), Reason::SystemShutdown)).ok();
                 let mut connection = connection.lock().unwrap();
                 connection.state = ConnectionState::ShuttingDown;
@@ -143,7 +149,7 @@ impl Router {
         info!("Goodbye messages sent.  Waiting 5 seconds for response");
         thread::sleep(Duration::from_secs(5));
         for realm in self.info.realms.lock().unwrap().values() {
-            for connection in realm.lock().unwrap().connections.iter() {
+            for connection in &realm.lock().unwrap().connections {
                 let connection = connection.lock().unwrap();
                 connection.sender.shutdown().ok();
             }
@@ -156,44 +162,34 @@ impl Router {
 impl ConnectionHandler{
 
     fn remove(&mut self) {
-        match self.realm {
-            Some(ref realm) => {
+        if let Some(ref realm) = self.realm {
 
-                let mut realm = realm.lock().unwrap();
-                {
-                    trace!("Removing subscriptions for client {}", self.info.lock().unwrap().id);
-                    let mut manager = &mut realm.subscription_manager;
-                    for subscription_id in self.subscribed_topics.iter() {
-                        trace!("Looking for subscription {}", subscription_id);
-                        match manager.subscription_ids_to_uris.get(&subscription_id) {
-                            Some(&(ref topic_uri, is_prefix)) => {
-                                trace!("Removing subscription to {:?}", topic_uri);
-                                manager.subscriptions.unsubscribe_with(topic_uri, &self.info, is_prefix).ok();
-                                trace!("Subscription tree: {:?}", manager.subscriptions);
-                            },
-                            None => {}
-                        }
+            let mut realm = realm.lock().unwrap();
+            {
+                trace!("Removing subscriptions for client {}", self.info.lock().unwrap().id);
+                let manager = &mut realm.subscription_manager;
+                for subscription_id in &self.subscribed_topics{
+                    trace!("Looking for subscription {}", subscription_id);
+                    if let Some(&(ref topic_uri, is_prefix)) = manager.subscription_ids_to_uris.get(subscription_id) {
+                        trace!("Removing subscription to {:?}", topic_uri);
+                        manager.subscriptions.unsubscribe_with(topic_uri, &self.info, is_prefix).ok();
+                        trace!("Subscription tree: {:?}", manager.subscriptions);
                     }
                 }
-                {
-                    let mut manager = &mut realm.registration_manager;
-                    for registration_id in self.registered_procedures.iter() {
-                        match manager.registration_ids_to_uris.get(&registration_id) {
-                            Some(&(ref topic_uri, is_prefix)) => {
-                                manager.registrations.unregister_with(topic_uri, &self.info, is_prefix).ok();
-                            },
-                            None => {}
-                        }
-                    }
-                }
-                let my_id = self.info.lock().unwrap().id.clone();
-                realm.connections.retain(|connection| {
-                    connection.lock().unwrap().id != my_id
-                });
-            },
-            None => {
-                // No need to do anything, since this connection was never added to a realm
             }
+            {
+                let manager = &mut realm.registration_manager;
+                for registration_id in &self.registered_procedures {
+                    if let Some(&(ref topic_uri, is_prefix)) =  manager.registration_ids_to_uris.get(registration_id) {
+                        manager.registrations.unregister_with(topic_uri, &self.info, is_prefix).ok();
+                    }
+                }
+            }
+            let my_id = self.info.lock().unwrap().id;
+            realm.connections.retain(|connection| {
+                connection.lock().unwrap().id != my_id
+            });
+
         }
 
     }

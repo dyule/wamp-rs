@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use super::{ConnectionHandler, ConnectionState, WAMP_JSON, WAMP_MSGPACK};
 
 use router::messaging::send_message;
@@ -58,9 +59,9 @@ impl ConnectionHandler {
         debug!("Setting realm to {}", realm);
         if let Some(realm) =  self.router.realms.lock().unwrap().get(&realm) {
             {
-            realm.lock().unwrap().connections.push(self.info.clone());
+            realm.lock().unwrap().connections.push(Arc::clone(&self.info));
         }
-            self.realm = Some(realm.clone());
+            self.realm = Some(Arc::clone(realm));
         } else {
             return Err(Error::new(ErrorKind::HandshakeError(Reason::NoSuchRealm)))
         }

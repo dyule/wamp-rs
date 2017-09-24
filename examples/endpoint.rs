@@ -9,6 +9,7 @@ use wamp::{URI, Value, Dict, List, CallResult, ArgList};
 use std::io;
 use eventual::Async;
 
+#[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 fn addition_callback(args: List, _kwargs: Dict) -> CallResult<(Option<List>, Option<Dict>)> {
     info!("Performing addition");
     try!(args.verify_len(2));
@@ -17,6 +18,7 @@ fn addition_callback(args: List, _kwargs: Dict) -> CallResult<(Option<List>, Opt
     Ok((Some(vec![Value::Integer(a + b)]), None))
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 fn multiplication_callback(args: List, _kwargs: Dict) -> CallResult<(Option<List>, Option<Dict>)> {
     info!("Performing multiplication");
     try!(args.verify_len(2));

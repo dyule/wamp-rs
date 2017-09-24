@@ -40,20 +40,20 @@ pub enum Message {
 
 macro_rules! serialize_with_args {
     ($args:expr, $kwargs:expr, $serializer:expr, $($item: expr),*) => (
-        match $kwargs {
-            &Some(ref kwargs) => {
-                match $args {
-                    &Some(ref args) => ( $($item,)* args, kwargs).serialize($serializer),
-                    &None           => ( $($item,)* Vec::<u8>::new(), kwargs).serialize($serializer),
+        if let Some(ref kwargs) = *$kwargs {
+                if let Some(ref args) =  *$args {
+                    ( $($item,)* args, kwargs).serialize($serializer)
+                } else {
+                    ( $($item,)* Vec::<u8>::new(), kwargs).serialize($serializer)
                 }
-            }, &None => {
-                match $args {
-                    &Some(ref args) => ( $($item,)* args).serialize($serializer),
-                    &None           => ( $($item,)*).serialize($serializer),
+            } else {
+                if let Some(ref args) = *$args {
+                    ( $($item,)* args).serialize($serializer)
+                } else {
+                    ( $($item,)*).serialize($serializer)
                 }
 
             }
-        }
     );
 }
 

@@ -127,3 +127,15 @@ impl ClientRoles {
         }
     }
 }
+
+impl Default for RouterRoles {
+    fn default() -> RouterRoles {
+        RouterRoles::new()
+    }
+}
+
+impl Default for ClientRoles {
+    fn default() -> ClientRoles {
+        ClientRoles::new()
+    }
+}

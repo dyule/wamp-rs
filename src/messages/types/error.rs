@@ -55,7 +55,7 @@ impl CallError {
         }
     }
 
-    pub fn to_tuple(self) -> (Reason, Option<List>, Option<Dict>) {
+    pub fn into_tuple(self) -> (Reason, Option<List>, Option<Dict>) {
         (self.reason, self.args, self.kwargs)
     }
 

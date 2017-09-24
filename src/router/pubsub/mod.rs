@@ -1,4 +1,5 @@
 mod patterns;
+use std::sync::Arc;
 use super::{ConnectionHandler, random_id};
 
 use router::messaging::send_message;
@@ -12,9 +13,9 @@ impl ConnectionHandler{
         match self.realm {
             Some(ref realm) => {
                 let mut realm = realm.lock().unwrap();
-                let mut manager = &mut realm.subscription_manager;
+                let manager = &mut realm.subscription_manager;
                 let topic_id = {
-                    let topic_id = match manager.subscriptions.subscribe_with(&topic, self.info.clone(), options.pattern_match.clone()) {
+                    let topic_id = match manager.subscriptions.subscribe_with(&topic, Arc::clone(&self.info), options.pattern_match) {
                         Ok(topic_id) => topic_id,
                         Err(e) => return Err(Error::new(ErrorKind::ErrorReason(ErrorType::Subscribe, request_id, e.reason())))
                     };
@@ -34,9 +35,9 @@ impl ConnectionHandler{
         match self.realm {
             Some(ref realm) => {
                 let mut realm = realm.lock().unwrap();
-                let mut manager = &mut realm.subscription_manager;
+                let manager = &mut realm.subscription_manager;
                 let (topic_uri, is_prefix) =  match manager.subscription_ids_to_uris.get(&topic_id) {
-                    Some(&(ref uri, ref is_prefix)) => (uri.clone(), is_prefix.clone()),
+                    Some(&(ref uri, ref is_prefix)) => (uri.clone(), *is_prefix),
                     None => return Err(Error::new(ErrorKind::ErrorReason(ErrorType::Unsubscribe, request_id, Reason::NoSuchSubscription)))
                 };
 
@@ -65,7 +66,7 @@ impl ConnectionHandler{
                 let publication_id = random_id();
                 let mut event_message = Message::Event(1, publication_id, EventDetails::new(), args.clone(), kwargs.clone());
                 let my_id = {
-                    self.info.lock().unwrap().id.clone()
+                    self.info.lock().unwrap().id
                 };
                 info!("Current topic tree: {:?}", manager.subscriptions);
                 for (subscriber, topic_id, policy) in manager.subscriptions.filter(topic.clone()) {
