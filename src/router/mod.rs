@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::collections::{HashMap};
 use std::marker::Sync;
 use rand::{thread_rng};
-use rand::distributions::{Range, IndependentSample};
+use rand::distributions::{Range, Distribution};
 use router::pubsub::SubscriptionPatternNode;
 use router::rpc::RegistrationPatternNode;
 use super::ID;
@@ -74,7 +74,7 @@ fn random_id() -> u64 {
     let mut rng = thread_rng();
     // TODO make this a constant
     let between = Range::new(0, 1u64.rotate_left(56) - 1);
-    between.ind_sample(&mut rng)
+    between.sample(&mut rng)
 }
 
 
