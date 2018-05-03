@@ -15,8 +15,7 @@ macro_rules! serialize_empty_workaround {
                 where S: serde::Serializer,
             {
 
-                let struc = try!(serializer.serialize_struct("", 0));
-                struc.end()
+                try!(serializer.serialize_map(Some(0))).end()
             }
         }
 
@@ -31,7 +30,7 @@ macro_rules! serialize_empty_workaround {
                         type Value = $name;
 
                         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                            formatter.write_str("empty struct")
+                            formatter.write_str("an empty struct")
                         }
 
                         #[inline]
@@ -45,7 +44,7 @@ macro_rules! serialize_empty_workaround {
                             self.visit_unit()
                         }
                     }
-                    deserializer.deserialize_unit_struct("",Visitor)
+                    deserializer.deserialize_map(Visitor)
                 }
             }
         }

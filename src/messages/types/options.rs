@@ -1,7 +1,7 @@
 use super::{ClientRoles, RouterRoles, MatchingPolicy, InvocationPolicy, is_not, URI};
 use serde;
 use std::fmt;
-use serde::ser::SerializeStruct;
+use serde::ser::SerializeMap;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct HelloDetails {
