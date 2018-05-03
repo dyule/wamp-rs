@@ -6,7 +6,7 @@ extern crate env_logger;
 extern crate log;
 
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
     let mut router = Router::new();
     router.add_realm("kitchen_realm");
     info!("Router listening");
