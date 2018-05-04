@@ -472,10 +472,10 @@ mod test {
             "[16,23934583,{\"acknowledge\":true},\"ca.dal.test.topic2\",[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
-        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(-5)]));
         two_way_test!(
             Message::Publish(3243542, PublishOptions::new(true), URI::new("ca.dal.test.topic3"), Some(Vec::new()), Some(kwargs)),
-            "[16,3243542,{\"acknowledge\":true},\"ca.dal.test.topic3\",[],{\"key1\":[5]}]"
+            "[16,3243542,{\"acknowledge\":true},\"ca.dal.test.topic3\",[],{\"key1\":[-5]}]"
         )
     }
 
@@ -499,10 +499,10 @@ mod test {
             "[36,764346,3895494,{},[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
-        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(-5)]));
         two_way_test!(
             Message::Event(65675, 587495, EventDetails::new(), Some(Vec::new()), Some(kwargs)),
-            "[36,65675,587495,{},[],{\"key1\":[5]}]"
+            "[36,65675,587495,{},[],{\"key1\":[-5]}]"
         )
     }
 
@@ -550,7 +550,7 @@ mod test {
             "[48,764346,{},\"com.myapp.echo\",[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
-        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::UnsignedInteger(5)]));
         two_way_test!(
             Message::Call(764346, CallOptions::new(), URI::new("com.myapp.compute"), Some(Vec::new()), Some(kwargs)),
             "[48,764346,{},\"com.myapp.compute\",[],{\"key1\":[5]}]"
@@ -569,7 +569,7 @@ mod test {
             "[68,764346,9823526,{},[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
-        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::UnsignedInteger(5)]));
         two_way_test!(
             Message::Invocation(764346, 9823526, InvocationDetails::new(), Some(Vec::new()), Some(kwargs)),
             "[68,764346,9823526,{},[],{\"key1\":[5]}]"
@@ -588,7 +588,7 @@ mod test {
             "[70,6131533,{},[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
-        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::UnsignedInteger(5)]));
         two_way_test!(
             Message::Yield(6131533, YieldOptions::new(), Some(Vec::new()), Some(kwargs)),
             "[70,6131533,{},[],{\"key1\":[5]}]"
@@ -607,10 +607,10 @@ mod test {
             "[50,764346,{},[\"a value\"]]"
         );
         let mut kwargs = HashMap::new();
-        kwargs.insert("key1".to_string(), Value::List(vec![Value::Integer(5)]));
+        kwargs.insert("key1".to_string(), Value::List(vec![Value::Float(8.6)]));
         two_way_test!(
             Message::Result(764346, ResultDetails::new(), Some(Vec::new()), Some(kwargs)),
-            "[50,764346,{},[],{\"key1\":[5]}]"
+            "[50,764346,{},[],{\"key1\":[8.6]}]"
         )
     }
 

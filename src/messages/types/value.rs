@@ -27,6 +27,8 @@ pub enum Value {
     // So, we just ignore them here
     Dict(Dict),
     Integer(i64),
+    UnsignedInteger(u64),
+    Float(f64),
     String(String),
     List(List),
     Boolean(bool)
@@ -135,20 +137,26 @@ impl Value {
             Value::Integer(i) => {
                 i.to_string()
             },
+            Value::UnsignedInteger(u) => {
+                u.to_string()
+            },
+            Value::Float(f) => {
+                f.to_string()
+            },
             Value::String(ref s) => {
                 if s.len() > 50 {
                     s[..50].to_string()
                 } else {
                     s.clone()
                 }
-            }
+            },
             Value::List(ref l) => {
                 let mut result = String::new();
                 result.push('[');
                 result.push_str(&l.iter().take(50).map(|element| element.summarize()).collect::<Vec<_>>().join(","));
                 result.push(']');
                 result
-            }
+            },
             Value::Boolean(b) => {
                 b.to_string()
             }
@@ -181,7 +189,12 @@ impl <'de> serde::de::Visitor<'de> for ValueVisitor {
     #[inline]
     fn visit_u64<E>(self, value: u64) -> Result<Value, E>
     where E: serde::de::Error {
-        Ok(Value::Integer(value as i64))
+        Ok(Value::UnsignedInteger(value))
+    }
+
+    fn visit_f64<E>(self, value: f64) -> Result<Value, E>
+    where E: serde::de::Error {
+        Ok(Value::Float(value))
     }
 
     #[inline]
@@ -239,6 +252,8 @@ impl serde::Serialize for Value {
             Value::Dict(ref dict) => dict.serialize(serializer),
             Value::String(ref s) => serializer.serialize_str(s),
             Value::Integer(i) => serializer.serialize_i64(i),
+            Value::UnsignedInteger(u) => serializer.serialize_u64(u),
+            Value::Float(f) => serializer.serialize_f64(f),
             Value::List(ref list) => list.serialize(serializer),
             Value::Boolean(b) => serializer.serialize_bool(b)
         }
