@@ -1,6 +1,7 @@
 //! Contains the `RegistrationPatternNode` struct, which is used for constructing a trie corresponding
 //! to pattern based registration
 use super::super::{random_id, ConnectionInfo};
+use itertools::Itertools;
 use messages::Reason;
 use rand::thread_rng;
 use rand::Rng;
@@ -131,12 +132,12 @@ impl<P: PatternData> RegistrationPatternNode<P> {
                 .procedures
                 .iter()
                 .map(|sub| sub.registrant.get_id())
-                .collect::<Vec<_>>(),
+                .join(","),
             self.connections
                 .procedures
                 .iter()
                 .map(|sub| sub.registrant.get_id())
-                .collect::<Vec<_>>()
+                .join(",")
         ));
         for (chunk, node) in &self.edges {
             for _ in 0..indent * 2 {

@@ -1,4 +1,5 @@
 use super::{CallError, Reason};
+use itertools::Itertools;
 use serde;
 use std::collections::HashMap;
 use std::fmt;
@@ -160,7 +161,6 @@ impl Value {
                 result.push_str(&d.iter()
                     .take(50)
                     .map(|(key, value)| format!("{}:{}", key, value.summarize()))
-                    .collect::<Vec<_>>()
                     .join(","));
                 result.push('}');
                 result
@@ -181,7 +181,6 @@ impl Value {
                 result.push_str(&l.iter()
                     .take(50)
                     .map(|element| element.summarize())
-                    .collect::<Vec<_>>()
                     .join(","));
                 result.push(']');
                 result

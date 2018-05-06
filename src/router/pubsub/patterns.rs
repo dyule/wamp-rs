@@ -1,6 +1,7 @@
 //! Contains the `SubscriptionPatternNode` struct, which is used for constructing a trie corresponding
 //! to pattern based subscription
 use super::super::{random_id, ConnectionInfo};
+use itertools::Itertools;
 use messages::Reason;
 use std::collections::HashMap;
 use std::fmt::{self, Debug, Formatter};
@@ -127,11 +128,11 @@ impl<P: PatternData> SubscriptionPatternNode<P> {
             self.prefix_connections
                 .iter()
                 .map(|sub| sub.subscriber.get_id())
-                .collect::<Vec<_>>(),
+                .join(","),
             self.connections
                 .iter()
                 .map(|sub| sub.subscriber.get_id())
-                .collect::<Vec<_>>()
+                .join(","),
         ));
         for (chunk, node) in &self.edges {
             for _ in 0..indent * 2 {
