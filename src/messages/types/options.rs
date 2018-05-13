@@ -1,7 +1,4 @@
 use super::{is_not, ClientRoles, InvocationPolicy, MatchingPolicy, RouterRoles, URI};
-use serde;
-use serde::ser::SerializeMap;
-use std::fmt;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct HelloDetails {
@@ -44,11 +41,11 @@ pub struct RegisterOptions {
     pub invocation_policy: InvocationPolicy,
 }
 
-#[derive(PartialEq, Debug, Default)]
-pub struct CallOptions;
+#[derive(PartialEq, Debug, Default, Serialize, Deserialize)]
+pub struct CallOptions {}
 
-#[derive(PartialEq, Debug, Default)]
-pub struct YieldOptions;
+#[derive(PartialEq, Debug, Default, Serialize, Deserialize)]
+pub struct YieldOptions {}
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct EventDetails {
@@ -68,8 +65,8 @@ pub struct InvocationDetails {
     pub procedure: Option<URI>,
 }
 
-#[derive(PartialEq, Debug, Default)]
-pub struct ResultDetails;
+#[derive(PartialEq, Debug, Default, Serialize, Deserialize)]
+pub struct ResultDetails {}
 
 impl HelloDetails {
     pub fn new(roles: ClientRoles) -> HelloDetails {
@@ -185,7 +182,3 @@ impl ResultDetails {
         ResultDetails {}
     }
 }
-
-serialize_empty!(CallOptions);
-serialize_empty!(YieldOptions);
-serialize_empty!(ResultDetails);
