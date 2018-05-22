@@ -22,7 +22,7 @@ log = "0.4"
 ws = "0.7"
 rmp = "0.8"
 rmp-serde = "0.13.1"
-rand = "0.3"
+rand = "0.5"
 eventual = "0.1.7"
 
 [dev-dependencies]
