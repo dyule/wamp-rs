@@ -3,32 +3,33 @@ extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
-extern crate ws;
-extern crate url;
+extern crate eventual;
+extern crate rand;
 extern crate rmp;
 extern crate rmp_serde;
-extern crate rand;
-extern crate eventual;
-
+extern crate url;
+extern crate ws;
 
 #[macro_use]
 extern crate log;
 
-mod messages;
-mod utils;
 pub mod client;
+mod messages;
 pub mod router;
+mod utils;
 
-use ws::Error as WSError;
-use std::fmt;
-use url::ParseError;
-use std::sync::mpsc::SendError;
-use serde_json::Error as JSONError;
 use rmp_serde::decode::Error as MsgPackError;
+use serde_json::Error as JSONError;
+use std::fmt;
+use std::sync::mpsc::SendError;
+use url::ParseError;
+use ws::Error as WSError;
 
-pub use messages::{URI, Dict, List, Value, Reason, MatchingPolicy, InvocationPolicy, CallError, ArgList, ArgDict};
-use messages::{ErrorType, Message};
 pub use client::{Client, Connection};
+pub use messages::{
+    ArgDict, ArgList, CallError, Dict, InvocationPolicy, List, MatchingPolicy, Reason, Value, URI,
+};
+use messages::{ErrorType, Message};
 pub use router::Router;
 
 pub type CallResult<T> = Result<T, CallError>;
@@ -37,7 +38,7 @@ pub type ID = u64;
 
 #[derive(Debug)]
 pub struct Error {
-    kind: ErrorKind
+    kind: ErrorKind,
 }
 
 #[derive(Debug)]
@@ -59,9 +60,7 @@ pub enum ErrorKind {
 }
 impl Error {
     fn new(kind: ErrorKind) -> Error {
-        Error {
-            kind: kind
-        }
+        Error { kind: kind }
     }
 
     fn get_description(&self) -> String {
@@ -69,11 +68,10 @@ impl Error {
     }
 
     #[inline]
-    fn get_kind(self) -> ErrorKind{
+    fn get_kind(self) -> ErrorKind {
         self.kind
     }
 }
-
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -92,8 +90,7 @@ impl ErrorKind {
             ErrorKind::MsgPackError(ref e) => e.to_string(),
             ErrorKind::ErrorReason(_, _, ref s) => s.to_string(),
             ErrorKind::Closing(ref s) => s.clone(),
-            ErrorKind::UnexpectedMessage(s) |
-            ErrorKind::InvalidState(s) => s.to_string(),
+            ErrorKind::UnexpectedMessage(s) | ErrorKind::InvalidState(s) => s.to_string(),
             ErrorKind::ConnectionLost => "Connection Lost".to_string(),
             ErrorKind::MalformedData => "Malformed Data".to_string(),
             ErrorKind::Timeout => "Connection timed out".to_string(),

@@ -1,47 +1,47 @@
-use super::{ClientRoles, RouterRoles, MatchingPolicy, InvocationPolicy, is_not, URI};
+use super::{is_not, ClientRoles, InvocationPolicy, MatchingPolicy, RouterRoles, URI};
 use serde;
-use std::fmt;
 use serde::ser::SerializeStruct;
+use std::fmt;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct HelloDetails {
-    #[serde(default, skip_serializing_if="Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     agent: Option<String>,
-    roles: ClientRoles
+    roles: ClientRoles,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct WelcomeDetails {
-    #[serde(default, skip_serializing_if="Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     agent: Option<String>,
-    roles:  RouterRoles
+    roles: RouterRoles,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct ErrorDetails {
-    #[serde(default, skip_serializing_if="Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     message: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct SubscribeOptions {
-    #[serde(default, rename="match", skip_serializing_if="MatchingPolicy::is_strict")]
-    pub pattern_match: MatchingPolicy
+    #[serde(default, rename = "match", skip_serializing_if = "MatchingPolicy::is_strict")]
+    pub pattern_match: MatchingPolicy,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct PublishOptions {
-    #[serde(default, skip_serializing_if="is_not")]
-    acknowledge: bool
+    #[serde(default, skip_serializing_if = "is_not")]
+    acknowledge: bool,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct RegisterOptions {
-    #[serde(default, rename="match", skip_serializing_if="MatchingPolicy::is_strict")]
+    #[serde(default, rename = "match", skip_serializing_if = "MatchingPolicy::is_strict")]
     pub pattern_match: MatchingPolicy,
 
-    #[serde(default, rename="invoke", skip_serializing_if="InvocationPolicy::is_single")]
-    pub invocation_policy: InvocationPolicy
+    #[serde(default, rename = "invoke", skip_serializing_if = "InvocationPolicy::is_single")]
+    pub invocation_policy: InvocationPolicy,
 }
 
 #[derive(PartialEq, Debug, Default)]
@@ -52,20 +52,19 @@ pub struct YieldOptions;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct EventDetails {
-    #[serde(default, skip_serializing_if="Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     publisher: Option<String>,
 
-    #[serde(default, skip_serializing_if="Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     trustlevel: Option<u64>,
 
-    #[serde(default, skip_serializing_if="Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub topic: Option<URI>,
-
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
 pub struct InvocationDetails {
-    #[serde(default, skip_serializing_if="Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub procedure: Option<URI>,
 }
 
@@ -76,47 +75,42 @@ impl HelloDetails {
     pub fn new(roles: ClientRoles) -> HelloDetails {
         HelloDetails {
             roles: roles,
-            agent: None
+            agent: None,
         }
     }
 
     pub fn new_with_agent(roles: ClientRoles, agent: &str) -> HelloDetails {
         HelloDetails {
             roles: roles,
-            agent: Some(agent.to_string())
+            agent: Some(agent.to_string()),
         }
     }
-
 }
 
 impl WelcomeDetails {
     pub fn new(roles: RouterRoles) -> WelcomeDetails {
         WelcomeDetails {
             roles: roles,
-            agent: None
+            agent: None,
         }
     }
 
     pub fn new_with_agent(roles: RouterRoles, agent: &str) -> WelcomeDetails {
         WelcomeDetails {
             roles: roles,
-            agent: Some(agent.to_string())
+            agent: Some(agent.to_string()),
         }
     }
-
 }
 
 impl ErrorDetails {
     pub fn new() -> ErrorDetails {
-        ErrorDetails {
-            message: None
-        }
+        ErrorDetails { message: None }
     }
-
 
     pub fn new_with_message(message: &str) -> ErrorDetails {
         ErrorDetails {
-            message: Some(message.to_string())
+            message: Some(message.to_string()),
         }
     }
 }
@@ -124,7 +118,7 @@ impl ErrorDetails {
 impl SubscribeOptions {
     pub fn new() -> SubscribeOptions {
         SubscribeOptions {
-            pattern_match: MatchingPolicy::Strict
+            pattern_match: MatchingPolicy::Strict,
         }
     }
 }
@@ -132,7 +126,7 @@ impl SubscribeOptions {
 impl PublishOptions {
     pub fn new(acknowledge: bool) -> PublishOptions {
         PublishOptions {
-            acknowledge: acknowledge
+            acknowledge: acknowledge,
         }
     }
 
@@ -145,20 +139,20 @@ impl RegisterOptions {
     pub fn new() -> RegisterOptions {
         RegisterOptions {
             pattern_match: MatchingPolicy::Strict,
-            invocation_policy: InvocationPolicy::Single
+            invocation_policy: InvocationPolicy::Single,
         }
     }
 }
 
 impl CallOptions {
     pub fn new() -> CallOptions {
-        CallOptions{}
+        CallOptions {}
     }
 }
 
 impl YieldOptions {
     pub fn new() -> YieldOptions {
-        YieldOptions{}
+        YieldOptions {}
     }
 }
 
@@ -167,7 +161,7 @@ impl EventDetails {
         EventDetails {
             publisher: None,
             trustlevel: None,
-            topic: None
+            topic: None,
         }
     }
 
@@ -175,22 +169,20 @@ impl EventDetails {
         EventDetails {
             publisher: None,
             trustlevel: None,
-            topic: Some(topic)
+            topic: Some(topic),
         }
     }
 }
 
 impl InvocationDetails {
     pub fn new() -> InvocationDetails {
-        InvocationDetails{
-            procedure: None
-        }
+        InvocationDetails { procedure: None }
     }
 }
 
 impl ResultDetails {
     pub fn new() -> ResultDetails {
-        ResultDetails{}
+        ResultDetails {}
     }
 }
 
