@@ -206,7 +206,7 @@ fn event_loop(mut client: Client) {
 }
 
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
     let connection = Connection::new("ws://127.0.0.1:8090/ws", "kitchen_realm");
     info!("Connecting");
     let client = connection.connect().unwrap();

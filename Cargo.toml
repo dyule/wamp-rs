@@ -26,4 +26,4 @@ rand = "0.5"
 eventual = "0.1.7"
 
 [dev-dependencies]
-env_logger = "0.3"
+env_logger = "0.5"
